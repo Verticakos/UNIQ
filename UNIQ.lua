@@ -585,8 +585,11 @@ end)
 pcall(function()
 	if queue_on_teleport then
 		player.OnTeleport:Connect(function(ts)
-			if ts==Enum.TeleportState.Started and state.autoReattach then
-				pcall(function() queue_on_teleport('task.wait(1.5) loadstring(game:HttpGet("'..SCRIPT_URL..'"))()') end)
+			if ts == Enum.TeleportState.Started and state.autoReattach then
+				queue_on_teleport([[
+					task.wait(1.5)
+					loadstring(game:HttpGet("https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"))()
+				]])
 			end
 		end)
 	end

@@ -398,7 +398,7 @@ local Gear=nn("ImageButton",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(1,-68,
 
 -- SETTINGS POPUP (moved right, stretched, bind moved left)
 local POP_W=232
-local settingsPop=nn("Frame",{Size=UDim2.new(0,0,0,42),Position=UDim2.new(1,-50,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,ClipsDescendants=true,ZIndex=100,Parent=Header})
+local settingsPop=nn("Frame",{Size=UDim2.new(0,0,0,42),Position=UDim2.new(1,-43,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,ClipsDescendants=true,ZIndex=100,Parent=Header})
 corner(settingsPop,6) stroke(settingsPop,Color3.fromRGB(0,166,255))
 nn("TextLabel",{Text="Menu Key",Font=Fn,TextSize=13,TextColor3=T.ValTxt,BackgroundTransparency=1,Position=UDim2.new(0,12,0.5,0),AnchorPoint=Vector2.new(0,0.5),Size=UDim2.new(0,70,0,20),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101,Parent=settingsPop})
 local menuKeyBtn=nn("TextButton",{Size=UDim2.new(0,76,0,22),Position=UDim2.new(1,-46,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Text=shortKey(state.menuKey),Font=FB,TextSize=11,TextColor3=T.Accent,AutoButtonColor=false,ZIndex=101,Parent=settingsPop}) corner(menuKeyBtn,4)

@@ -12,6 +12,22 @@ if _G.UniqFovDrawing then pcall(function() _G.UniqFovDrawing:Remove() end) _G.Un
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"
 
+-- FIX: Auto Reattach function defined early to be called on toggle and on load
+local function updateAutoReattach()
+	local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport)
+	if queueFunc then
+		if state.autoReattach then
+			pcall(function()
+				queueFunc('task.wait(1.5) loadstring(game:HttpGet("'..SCRIPT_URL..'"))()')
+			end)
+		else
+			pcall(function()
+				queueFunc('') -- Clear the queue if toggled off
+			end)
+		end
+	end
+end
+
 local function httpGet(url) local req=(request or http_request or (syn and syn.request) or (fluxus and fluxus.request)) if req then local ok,r=pcall(req,{Url=url,Method="GET"}) if ok and r and r.Body then return r.Body end end if game.HttpGet then local ok,r=pcall(function() return game:HttpGet(url) end) if ok then return r end end return nil end
 
 local state={walkSpeedEnabled=false,walkSpeedMultiplier=1.0,flyEnabled=false,flySpeed=300,jumpEnabled=false,jumpHeight=7.2,noJumpCooldown=false,infiniteJump=false,autoJump=false,noRagdoll=false,highGrav=false,noclip=false,visualMaxDistance=500,selectedPlayer=nil,selectedStaff=nil,menuKey=Enum.KeyCode.RightShift,autoReattach=true,aimbotEnabled=false,aimbotFov=120,aimbotSmoothX=10,aimbotSmoothY=10,aimbotTargetPart="Head",showFov=false,aimbotKey=nil,aimbotActivation="Hold",aimbotToggled=false,aimMinDist=1,aimMaxDist=500,aimbotIgnoreDead=false,ignoreFriend=false,friends={},aimMethod="Camera"}
@@ -69,8 +85,7 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 						local meters=(Camera.CFrame.Position-aimPos).Magnitude*0.28
 						if meters>=state.aimMinDist and meters<=state.aimMaxDist then
 							local sp,on=Camera:WorldToViewportPoint(aimPos)
-							if on then local d=(Vector2.new(sp.X,sp.Y)-center).Magnitude if d<bestDist then bestDist=d best=aimPos end end
-						end
+							if on then local d=(Vector2.new(sp.X,sp.Y)-center).Magnitude if d<bestDist then bestDist=d best=aimPos end end end
 					end
 				end
 			end
@@ -86,7 +101,6 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 			Camera.CFrame=CFrame.new(camPos,camPos+mixed)
 
 		elseif state.aimMethod=="MouseMoveRel" then
-			-- Relative mouse movement (mousemoverel)
 			local sp,on=Camera:WorldToViewportPoint(best)
 			if on then
 				local deltaX=sp.X-center.X
@@ -236,7 +250,7 @@ local TH={
 	["No Ragdoll"]=function(e) state.noRagdoll=e applyNoRagdoll(e) end,
 	["High Gravity"]=function(e) state.highGrav=e workspace.Gravity=e and 600 or 196.2 end,
 	["Anti-AFK"]=function(e) state.antiAFK=e if e then if not antiAFKConn then antiAFKConn=player.Idled:Connect(function() local vu=game:GetService("VirtualUser") vu:CaptureController() vu:ClickButton2(Vector2.new(0,0)) end) end else if antiAFKConn then antiAFKConn:Disconnect() antiAFKConn=nil end end end,
-	["Auto Reattach"]=function(e) state.autoReattach=e end,
+	["Auto Reattach"]=function(e) state.autoReattach=e updateAutoReattach() end, -- FIX: Attached to update function
 	["NoClip"]=setNoClip,
 	["Enabled"]=function(e) OvE=e refreshAll() end,
 	["Boxes"]=function(e) setVT(e,function(v) BoxE=v end,rmBox) end,
@@ -582,17 +596,9 @@ UIS.InputBegan:Connect(function(i,gp)
 	end
 end)
 
-pcall(function()
-	if queue_on_teleport then
-		player.OnTeleport:Connect(function(ts)
-			if ts == Enum.TeleportState.Started and state.autoReattach then
-				queue_on_teleport([[
-					task.wait(1.5)
-					loadstring(game:HttpGet("https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"))()
-				]])
-			end
-		end)
-	end
-end)
+-- FIX: Call updateAutoReattach on load if enabled
+if state.autoReattach then
+	updateAutoReattach()
+end
 
 SwitchTab("Player") print("[UNIQ] V24 loaded.")

@@ -11,6 +11,13 @@ local oldPrev=CoreGui:FindFirstChild("UniqPreview") if oldPrev then oldPrev:Dest
 if _G.UniqFovDrawing then pcall(function() _G.UniqFovDrawing:Remove() end) _G.UniqFovDrawing=nil end
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"
+local SETTINGS_FILE = "UNIQ_V25_Settings.json"
+local restoredSettings
+if type(isfile)=="function" and type(readfile)=="function" then
+	pcall(function()
+		if isfile(SETTINGS_FILE) then restoredSettings=HttpService:JSONDecode(readfile(SETTINGS_FILE)) end
+	end)
+end
 
 local function httpGet(url) local req=(request or http_request or (syn and syn.request) or (fluxus and fluxus.request)) if req then local ok,r=pcall(req,{Url=url,Method="GET"}) if ok and r and r.Body then return r.Body end end if game.HttpGet then local ok,r=pcall(function() return game:HttpGet(url) end) if ok then return r end end return nil end
 
@@ -259,7 +266,7 @@ local refresh=refreshPlayerVisuals
 local function refreshAll() if not OvE then clearVis() return end for _,p in ipairs(Players:GetPlayers()) do refreshPlayerVisuals(p) end end
 local function updateFill() for _,p in ipairs(Players:GetPlayers()) do local b=Boxes[p] if b then local fr=b:FindFirstChild("Frame") if fr then fr.BackgroundTransparency=FillE and(1-FillOpacity/100) or 1 local s=fr:FindFirstChildOfClass("UIStroke") if s then s.Color=BCol s.Thickness=BoxThick s.Transparency=CornE and 1 or 0 end for _,ch in ipairs(fr:GetChildren()) do if ch:IsA("Frame") then ch.BackgroundColor3=BCol ch.Visible=CornE ch.Size=cornerSize(ch.Name:sub(1,1)=="H") end end end end end end
 
--- ============ AUTO REATTACH (ESP respawn) ============
+-- ============ VISUALS: CHARACTER RESPAWN REFRESH ============
 local function setupPlayer(plr)
 	if CConns[plr] then CConns[plr]:Disconnect() CConns[plr]=nil end
 	if plr.Character then refreshPlayerVisuals(plr) end
@@ -306,9 +313,7 @@ local TH={
 	["No Ragdoll"]=function(e) state.noRagdoll=e applyNoRagdoll(e) end,
 	["High Gravity"]=function(e) state.highGrav=e workspace.Gravity=e and 600 or 196.2 end,
 	["Anti-AFK"]=function(e) state.antiAFK=e if e then if not antiAFKConn then antiAFKConn=player.Idled:Connect(function() local vu=game:GetService("VirtualUser") vu:CaptureController() vu:ClickButton2(Vector2.new(0,0)) end) end else if antiAFKConn then antiAFKConn:Disconnect() antiAFKConn=nil end end end,
-	["Auto Reattach"] = function(e)
-        state.autoReattach = e
-    end,
+	["Auto Reattach"]=function(e) state.autoReattach=e end,
 	["NoClip"]=setNoClip,
 	["Enabled"]=function(e) OvE=e refreshAll() end,
 	["Boxes"]=function(e) setVT(e,function(v) BoxE=v end,rmBox) end,
@@ -350,6 +355,53 @@ local DH={
 	["Target Part"]=function(v) state.aimbotTargetPart=v end,
 	["Activation Mode"]=function(v) state.aimbotActivation=v state.aimbotToggled=false end
 }
+
+local function unpackEnum(value)
+	if type(value)~="table" or not value.type or not value.name then return nil end
+	local enumType=Enum[value.type]
+	return enumType and enumType[value.name] or nil
+end
+
+local function packEnum(value)
+	if typeof(value)=="EnumItem" then return {type=value.EnumType.Name,name=value.Name} end
+end
+
+local function restoreSettings()
+	local saved=restoredSettings
+	if type(saved)~="table" then return end
+	local s=saved.state or {}
+	for _,key in ipairs({"walkSpeedEnabled","walkSpeedMultiplier","flyEnabled","flySpeed","jumpEnabled","jumpHeight","noJumpCooldown","infiniteJump","autoJump","noRagdoll","highGrav","antiAFK","noclip","visualMaxDistance","aimbotEnabled","aimbotFov","aimbotSmoothX","aimbotSmoothY","aimbotTargetPart","showFov","aimbotActivation","aimMinDist","aimMaxDist","aimbotIgnoreDead","ignoreFriend","aimMethod","autoReattach"}) do
+		if s[key]~=nil then state[key]=s[key] end
+	end
+	state.friends=type(s.friends)=="table" and s.friends or state.friends
+	state.menuKey=unpackEnum(s.menuKey) or state.menuKey
+	state.aimbotKey=unpackEnum(s.aimbotKey) or state.aimbotKey
+	local v=saved.visuals or {}
+	OvE=v.overlayEnabled==true; ISelf=v.ignoreSelf==true; IDead=v.ignoreDead==true
+	BoxE=v.boxes==true; SkelE=v.skeleton==true; TrE=v.tracers==true; DistE=v.distance==true
+	NameE=v.nametags==true; DisplayTagsE=v.displayTags==true; FillE=v.fill==true; CornE=v.corners==true
+	FillOpacity=tonumber(v.fillOpacity) or FillOpacity; BoxThick=tonumber(v.boxThickness) or BoxThick
+	TracerThick=tonumber(v.tracerThickness) or TracerThick; SKT=tonumber(v.skeletonThickness) or SKT
+	if v.textFont and Enum.Font[v.textFont] then TxtFont=Enum.Font[v.textFont] end
+	TH["Toggle"](state.walkSpeedEnabled,"Speed"); TH["Toggle"](state.flyEnabled,"Fly"); TH["Toggle"](state.jumpEnabled,"Super Jump")
+	TH["No Ragdoll"](state.noRagdoll); TH["High Gravity"](state.highGrav); TH["NoClip"](state.noclip); TH["Anti-AFK"](state.antiAFK==true)
+	updateFill(); refreshAll()
+end
+
+local function saveSettings()
+	if type(writefile)~="function" then return end
+	local data={state={walkSpeedEnabled=state.walkSpeedEnabled,walkSpeedMultiplier=state.walkSpeedMultiplier,flyEnabled=state.flyEnabled,flySpeed=state.flySpeed,jumpEnabled=state.jumpEnabled,jumpHeight=state.jumpHeight,noJumpCooldown=state.noJumpCooldown,infiniteJump=state.infiniteJump,autoJump=state.autoJump,noRagdoll=state.noRagdoll,highGrav=state.highGrav,antiAFK=state.antiAFK,noclip=state.noclip,visualMaxDistance=state.visualMaxDistance,autoReattach=state.autoReattach,aimbotEnabled=state.aimbotEnabled,aimbotFov=state.aimbotFov,aimbotSmoothX=state.aimbotSmoothX,aimbotSmoothY=state.aimbotSmoothY,aimbotTargetPart=state.aimbotTargetPart,showFov=state.showFov,aimbotActivation=state.aimbotActivation,aimMinDist=state.aimMinDist,aimMaxDist=state.aimMaxDist,aimbotIgnoreDead=state.aimbotIgnoreDead,ignoreFriend=state.ignoreFriend,aimMethod=state.aimMethod,friends=state.friends,menuKey=packEnum(state.menuKey),aimbotKey=packEnum(state.aimbotKey)},visuals={overlayEnabled=OvE,ignoreSelf=ISelf,ignoreDead=IDead,boxes=BoxE,skeleton=SkelE,tracers=TrE,distance=DistE,nametags=NameE,displayTags=DisplayTagsE,fill=FillE,corners=CornE,fillOpacity=FillOpacity,boxThickness=BoxThick,tracerThickness=TracerThick,skeletonThickness=SKT,textFont=TxtFont.Name}}
+	pcall(function() writefile(SETTINGS_FILE,HttpService:JSONEncode(data)) end)
+end
+
+restoreSettings()
+player.OnTeleport:Connect(saveSettings)
+task.spawn(function() while _G.UniqGen==GEN do task.wait(2) saveSettings() end end)
+
+local restoredConditionDefaults={state.aimbotEnabled,state.showFov,state.aimbotIgnoreDead,state.ignoreFriend,state.walkSpeedEnabled,state.flyEnabled,state.jumpEnabled,state.infiniteJump,state.autoJump,state.noJumpCooldown,state.noRagdoll,state.highGrav,state.noclip,OvE,BoxE,FillE,CornE,SkelE,TrE,DistE,NameE,DisplayTagsE,IDead,ISelf,state.ignoreFriend,state.autoReattach,state.antiAFK==true}
+local restoredDropdownDefaults={state.aimbotActivation,state.aimMethod,state.aimbotTargetPart,TxtFont.Name,state.selectedPlayer or "None",state.selectedStaff or "None"}
+local restoredKeybindDefaults={state.aimbotKey}
+local restoredConditionIndex,restoredDropdownIndex,restoredKeybindIndex=0,0,0
 
 local function shutdown()
 	state.walkSpeedEnabled=false state.flyEnabled=false state.jumpEnabled=false state.noJumpCooldown=false state.infiniteJump=false state.autoJump=false state.noRagdoll=false state.highGrav=false state.antiAFK=false state.noclip=false OvE=false BoxE=false SkelE=false TrE=false DistE=false NameE=false DisplayTagsE=false FillE=false state.aimbotEnabled=false
@@ -440,6 +492,8 @@ end
 
 local listening=nil
 local function Condition(parent,text,default,fn,indent)
+	restoredConditionIndex=restoredConditionIndex+1
+	if restoredConditionDefaults[restoredConditionIndex]~=nil then default=restoredConditionDefaults[restoredConditionIndex] end
     local X=indent or 0 local r=nn("Frame",{Size=UDim2.new(1,-4,0,28),BackgroundTransparency=1,Parent=parent}) local st=default or false
     local box=nn("TextButton",{Size=UDim2.new(0,16,0,16),Position=UDim2.new(0,4+X,0.5,-8),BackgroundColor3=st and T.Accent or T.Track,BorderSizePixel=0,Text=st and "✓" or "",TextColor3=Color3.new(1,1,1),Font=FB,TextSize=11,AutoButtonColor=false,Parent=r}) corner(box,3)
     local lbl=nn("TextLabel",{Text=text,Font=Fn,TextSize=13,TextColor3=st and T.Text or T.ValTxt,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,Position=UDim2.new(0,28+X,0,0),Size=UDim2.new(1,-80-X,1,0),Parent=r})
@@ -453,6 +507,8 @@ local function Condition(parent,text,default,fn,indent)
 end
 
 local function KeybindRow(parent,text,default,cb)
+	restoredKeybindIndex=restoredKeybindIndex+1
+	if restoredKeybindDefaults[restoredKeybindIndex]~=nil then default=restoredKeybindDefaults[restoredKeybindIndex] end
     local r=nn("Frame",{Size=UDim2.new(1,-4,0,28),BackgroundTransparency=1,Parent=parent})
     nn("TextLabel",{Text=text,Font=Fn,TextSize=13,TextColor3=T.Text,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,Position=UDim2.new(0,4,0,0),Size=UDim2.new(1,-96,1,0),Parent=r})
     local btn=nn("TextButton",{Size=UDim2.new(0,84,0,22),Position=UDim2.new(1,-88,0.5,-11),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Text=shortKey(default),Font=FB,TextSize=11,TextColor3=default and T.Accent or T.ValTxt,AutoButtonColor=false,Parent=r}) corner(btn,5)
@@ -472,6 +528,8 @@ end
 local function Value(parent,text,min,max,default,dec,suffix,fn) local wrap=nn("Frame",{Size=UDim2.new(1,-4,0,52),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Parent=parent}) corner(wrap,6) local val=default nn("TextLabel",{Text=text,Font=Fn,TextSize=13,TextColor3=T.Text,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,Position=UDim2.new(0,12,0,0),Size=UDim2.new(0.6,0,0,24),Parent=wrap}) local num=nn("TextLabel",{Text=string.format("%."..dec.."f",val)..(suffix or ""),Font=Fn,TextSize=13,TextColor3=T.ValTxt,TextXAlignment=Enum.TextXAlignment.Right,BackgroundTransparency=1,Position=UDim2.new(0.4,0,0,0),Size=UDim2.new(0.6,-12,0,24),Parent=wrap}) local trackFrame=nn("Frame",{Size=UDim2.new(1,-24,0,2),Position=UDim2.new(0,12,0,34),BackgroundTransparency=1,BorderSizePixel=0,Parent=wrap}) nn("Frame",{Size=UDim2.new(1,0,0,2),BackgroundColor3=Color3.fromRGB(55,55,55),BorderSizePixel=0,Parent=trackFrame}) local fill=nn("Frame",{Size=UDim2.new(math.clamp((val-min)/(max-min),0,1),0,1,0),BackgroundColor3=T.Accent,BorderSizePixel=0,Parent=trackFrame}) local hit=nn("TextButton",{Size=UDim2.new(1,-24,0,20),Position=UDim2.new(0,12,0,26),BackgroundTransparency=1,Text="",Parent=wrap}) local sl=false local function apply(px) local a=math.clamp((px-trackFrame.AbsolutePosition.X)/trackFrame.AbsoluteSize.X,0,1) local raw=min+(max-min)*a val=(dec==0) and math.floor(raw+0.5) or tonumber(string.format("%."..dec.."f",raw)) fill.Size=UDim2.new(a,0,1,0) num.Text=string.format("%."..dec.."f",val)..(suffix or "") if fn then fn(val) end end hit.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=true apply(i.Position.X) end end) UIS.InputChanged:Connect(function(i) if sl and i.UserInputType==Enum.UserInputType.MouseMovement then apply(i.Position.X) end end) UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=false end end) return {Get=function() return val end} end
 
 local function Dropdown(parent,text,source,default,fn)
+	restoredDropdownIndex=restoredDropdownIndex+1
+	if restoredDropdownDefaults[restoredDropdownIndex]~=nil then default=restoredDropdownDefaults[restoredDropdownIndex] end
     local wrap=nn("Frame",{Size=UDim2.new(1,-4,0,46),BackgroundTransparency=1,ClipsDescendants=true,Parent=parent})
     local current=default or "None"
     nn("TextLabel",{Text=text,Font=Fn,TextSize=13,TextColor3=T.Text,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,Position=UDim2.new(0,0,0,0),Size=UDim2.new(0.55,0,0,30),Parent=wrap})
@@ -561,15 +619,15 @@ Condition(cL,"Ignore Friend",false,function(v) TH["Ignore Friend"](v) end)
 local cR=Combat.Right("Customization")
 Dropdown(cR,"Aim Method",{"Camera","MouseMoveRel","Silent"},"Camera",function(v) state.aimMethod=v end)
 Dropdown(cR,"Target Part",{"Head","Neck","Torso","Closest"},"Head",function(v) DH["Target Part"](v) end)
-Value(cR,"FOV Size",1,360,120,0,"",function(v) SH["FOV Size"](v) end)
-Value(cR,"Horizontal Smoothing",1,100,10,0,"",function(v) SH["Horizontal Smoothing"](v) end)
-Value(cR,"Vertical Smoothing",1,100,10,0,"",function(v) SH["Vertical Smoothing"](v) end)
-Value(cR,"Min Distance",1,100,1,0,"",function(v) SH["Aim Min Distance"](v) end)
-Value(cR,"Max Distance",1,500,500,0,"",function(v) SH["Aim Max Distance"](v) end)
+Value(cR,"FOV Size",1,360,state.aimbotFov,0,"",function(v) SH["FOV Size"](v) end)
+Value(cR,"Horizontal Smoothing",1,100,state.aimbotSmoothX,0,"",function(v) SH["Horizontal Smoothing"](v) end)
+Value(cR,"Vertical Smoothing",1,100,state.aimbotSmoothY,0,"",function(v) SH["Vertical Smoothing"](v) end)
+Value(cR,"Min Distance",1,100,state.aimMinDist,0,"",function(v) SH["Aim Min Distance"](v) end)
+Value(cR,"Max Distance",1,500,state.aimMaxDist,0,"",function(v) SH["Aim Max Distance"](v) end)
 
 local pL=Player.Left("Conditions")
 Condition(pL,"Speed",false,function(v) TH["Toggle"](v,"Speed") end) Condition(pL,"Fly",false,function(v) TH["Toggle"](v,"Fly") end) Condition(pL,"Super Jump",false,function(v) TH["Toggle"](v,"Super Jump") end) Condition(pL,"Infinite Jump",false,function(v) TH["Infinite Jump"](v) end) Condition(pL,"Auto Jump",false,function(v) TH["Auto Jump"](v) end) Condition(pL,"No Jump Cooldown",false,function(v) TH["No Jump Cooldown"](v) end) Condition(pL,"No Ragdoll",false,function(v) TH["No Ragdoll"](v) end) Condition(pL,"High Gravity",false,function(v) TH["High Gravity"](v) end) Condition(pL,"NoClip",false,function(v) TH["NoClip"](v) end)
-local pR=Player.Right("Customization") Value(pR,"Walk Speed",1,50,1.0,1,"",function(v) SH["Walk Speed"](v) end) Value(pR,"Fly Speed",50,500,300,0,"",function(v) SH["Fly Speed"](v) end) Value(pR,"Jump Height",7.2,100,7.2,1,"",function(v) SH["Jump Height"](v) end)
+local pR=Player.Right("Customization") Value(pR,"Walk Speed",1,50,state.walkSpeedMultiplier,1,"",function(v) SH["Walk Speed"](v) end) Value(pR,"Fly Speed",50,500,state.flySpeed,0,"",function(v) SH["Fly Speed"](v) end) Value(pR,"Jump Height",7.2,100,state.jumpHeight,1,"",function(v) SH["Jump Height"](v) end)
 
 local vL=Visuals.Left("Conditions") Condition(vL,"Enabled",false,function(v) TH["Enabled"](v) end)
 local fillCond,cornerCond
@@ -582,11 +640,11 @@ displayCond=Condition(vL,"Display Tags",false,function(v) if v and nameCond then
 Condition(vL,"Ignore Dead",false,function(v) TH["Ignore Dead"](v) end) Condition(vL,"Ignore Self",false,function(v) TH["Ignore Self"](v) end)
 Condition(vL,"Ignore Friend",false,function(v) TH["Ignore Friend"](v) end)
 local vR=Visuals.Right("Customization")
-Value(vR,"Max Distance",50,2000,500,0,"m",function(v) SH["Max Distance"](v) end)
-Value(vR,"Fill Opacity",0,100,60,0,"%",function(v) SH["Fill Opacity"](v) end)
-Value(vR,"Box Thickness",1,5,2,1,"",function(v) SH["Box Thickness"](v) end)
-Value(vR,"Tracer Thickness",1,5,1.5,1,"",function(v) SH["Tracer Thickness"](v) end)
-Value(vR,"Skeleton Thickness",1,5,1,1,"",function(v) SH["Skeleton Thickness"](v) end)
+Value(vR,"Max Distance",50,2000,state.visualMaxDistance,0,"m",function(v) SH["Max Distance"](v) end)
+Value(vR,"Fill Opacity",0,100,FillOpacity,0,"%",function(v) SH["Fill Opacity"](v) end)
+Value(vR,"Box Thickness",1,5,BoxThick,1,"",function(v) SH["Box Thickness"](v) end)
+Value(vR,"Tracer Thickness",1,5,TracerThick,1,"",function(v) SH["Tracer Thickness"](v) end)
+Value(vR,"Skeleton Thickness",1,5,SKT,1,"",function(v) SH["Skeleton Thickness"](v) end)
 Dropdown(vR,"Text Style",function() return DS["Text Style"]() end,"GothamBold",function(v) DH["Text Style"](v) end)
 Button(vR,"Toggle Preview",TogglePreview)
 
@@ -614,8 +672,8 @@ end)
 state.friendBtn=friendBtn
 
 local mL=Misc.Left("Menu")
-Condition(mL,"Anti-AFK",false,function(v) TH["Anti-AFK"](v) end)
 Condition(mL,"Auto Reattach",true,function(v) TH["Auto Reattach"](v) end)
+Condition(mL,"Anti-AFK",false,function(v) TH["Anti-AFK"](v) end)
 Button(mL,"Unload Menu",function() closePreview() pcall(shutdown) _G.UniqShutdown=nil Screen:Destroy() end)
 local mR=Misc.Right("Utilities")
 Button(mR,"Server Hop",serverHop) Button(mR,"Rejoin Server",rejoin) Button(mR,"Copy Server ID",function() if setclipboard then setclipboard(game.JobId) end end)
@@ -648,27 +706,23 @@ UIS.InputBegan:Connect(function(i,gp)
 end)
 
 
-local queueTeleport =
-    queue_on_teleport
+local queueTeleport = queue_on_teleport
     or queueonteleport
     or (syn and syn.queue_on_teleport)
 
-if type(queueTeleport) ~= "function" then
-    warn("[UNIQ] Auto Reattach unavailable.")
-else
+if type(queueTeleport) == "function" then
     local queuedCode = ([[
         task.wait(2)
-        loadstring(game:HttpGet(%q))()
+        local source = game:HttpGet(%q)
+        local run, err = loadstring(source)
+        if not run then
+            warn("[UNIQ] Reattach download could not be compiled:", err)
+            return
+        end
+        run()
     ]]):format(SCRIPT_URL)
 
-    player.OnTeleport:Connect(function(teleportState)
-        if teleportState == Enum.TeleportState.Started and state.autoReattach then
-            local ok, err = pcall(queueTeleport, queuedCode)
-            if not ok then
-                warn("[UNIQ] Reattach failed:", err)
-            end
-        end
-    end)
+    pcall(queueTeleport, queuedCode)
 end
 
 SwitchTab("Player") print("[UNIQ] V25 loaded.")

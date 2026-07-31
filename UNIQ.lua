@@ -647,7 +647,7 @@ UIS.InputBegan:Connect(function(i,gp)
 	end
 end)
 
-ppcall(function()
+pcall(function()
 	local queue = queue_on_teleport or (syn and syn.queue_on_teleport)
 	if not queue then return end
 

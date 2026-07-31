@@ -1,4 +1,4 @@
---[[ UNIQ V21 — COMPLETE ]]
+--[[ UNIQ V22 — COMPLETE ]]
 local Players=game:GetService("Players") local RunService=game:GetService("RunService")
 local UserInputService=game:GetService("UserInputService") local TweenService=game:GetService("TweenService")
 local CoreGui=game:GetService("CoreGui") local Lighting=game:GetService("Lighting")
@@ -10,6 +10,7 @@ local GEN=(_G.UniqGen or 0)+1 _G.UniqGen=GEN
 local oldPrev=CoreGui:FindFirstChild("UniqPreview") if oldPrev then oldPrev:Destroy() end
 if _G.UniqFovDrawing then pcall(function() _G.UniqFovDrawing:Remove() end) _G.UniqFovDrawing=nil end
 
+-- AUTO REATTACH URL
 local SCRIPT_URL = "https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"
 
 local function httpGet(url) local req=(request or http_request or (syn and syn.request) or (fluxus and fluxus.request)) if req then local ok,r=pcall(req,{Url=url,Method="GET"}) if ok and r and r.Body then return r.Body end end if game.HttpGet then local ok,r=pcall(function() return game:HttpGet(url) end) if ok then return r end end return nil end
@@ -54,8 +55,14 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 						local sc=center local bp,bd=nil,math.huge
 						for _,n in ipairs({"Head","UpperTorso","Torso"}) do local p=plr.Character:FindFirstChild(n) if p then local sp,on=Camera:WorldToViewportPoint(p.Position) if on then local d=(Vector2.new(sp.X,sp.Y)-sc).Magnitude if d<bd then bd=d bp=p.Position end end end end
 						aimPos=bp
+					elseif state.aimbotTargetPart=="Neck" then
+						local h=plr.Character:FindFirstChild("Head") local t=plr.Character:FindFirstChild("UpperTorso") or plr.Character:FindFirstChild("Torso")
+						if h and t then aimPos=(h.Position+t.Position)/2 elseif h then aimPos=h.Position end
+					elseif state.aimbotTargetPart=="Torso" then
+						local p=plr.Character:FindFirstChild("UpperTorso") or plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("HumanoidRootPart")
+						if p then aimPos=p.Position end
 					else
-						local p=plr.Character:FindFirstChild(state.aimbotTargetPart) or plr.Character:FindFirstChild("Head")
+						local p=plr.Character:FindFirstChild("Head")
 						if p then aimPos=p.Position end
 					end
 					if aimPos then
@@ -78,39 +85,6 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- FLING PLAYER
-local function flingSelected()
-	local targetName = state.selectedPlayer
-	if not targetName or targetName == "None" then warn("[UNIQ] No player selected to fling") return end
-	local target = findP and findP(targetName)
-	if not target then return end
-	local pchar = player.Character
-	if not pchar then return end
-	local phrp = pchar:FindFirstChild("HumanoidRootPart")
-	if not phrp then return end
-	local tchar = target.Character
-	if not tchar then return end
-	local thrp = tchar:FindFirstChild("HumanoidRootPart") or tchar:FindFirstChild("Torso") or tchar:FindFirstChild("UpperTorso")
-	if not thrp then return end
-	if flingConn then flingConn:Disconnect() end
-	phrp.CFrame = thrp.CFrame
-	flingConn = RunService.Heartbeat:Connect(function()
-		if not (pchar and pchar:FindFirstChild("HumanoidRootPart") and tchar and tchar:FindFirstChild("HumanoidRootPart") or tchar:FindFirstChild("Torso") or tchar:FindFirstChild("UpperTorso")) then
-			if flingConn then flingConn:Disconnect() flingConn = nil end
-			return
-		end
-		local h = pchar:FindFirstChild("HumanoidRootPart")
-		local t = tchar:FindFirstChild("HumanoidRootPart") or tchar:FindFirstChild("Torso") or tchar:FindFirstChild("UpperTorso")
-		h.CFrame = t.CFrame
-		h.Velocity = Vector3.new(9e9, 9e9, 9e9)
-		h.RotVelocity = Vector3.new(9e9, 9e9, 9e9)
-	end)
-end
-
-local function stopFling()
-	if flingConn then flingConn:Disconnect() flingConn = nil end
-end
-
 local function applyNoRagdoll(on) local h=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if not h then return end h.BreakJointsOnDeath=not on pcall(function() h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,not on) end) pcall(function() h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,not on) end) end
 task.spawn(function() while _G.UniqGen==GEN do task.wait(0.5) if state.noRagdoll then applyNoRagdoll(true) end end end)
 local function cacheCol() local c=player.Character if not c then return end originalCollision={} for _,p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then originalCollision[p]=p.CanCollide end end end
@@ -123,12 +97,74 @@ local function setFly(on) local c=player.Character if not c or not c:FindFirstCh
 charConn=player.CharacterAdded:Connect(function() task.wait(0.5) cacheCol() applyWalkSpeed() applyJump() if state.noRagdoll then applyNoRagdoll(true) end flying=false resetControls() setNoClip(state.noclip) if state.flyEnabled then setFly(true) end end)
 if player.Character then cacheCol() setNoClip(state.noclip) if state.noRagdoll then applyNoRagdoll(true) end end
 
--- ONLINE
+-- ONLINE / PLAYER LOOKUP (must come before fling)
 local function getSelPlayers() local l={} for _,p in ipairs(Players:GetPlayers()) do if p~=player then table.insert(l,p.Name) end end table.sort(l) return l end
-local function findP(name) if not name then return nil end for _,p in ipairs(Players:GetPlayers()) do if p.Name==name then return p end end end
+local function findP(name) if not name or name=="None" then return nil end for _,p in ipairs(Players:GetPlayers()) do if p.Name==name then return p end end return nil end
 local function tpToSel() local t=findP(state.selectedPlayer) local tH=t and t.Character and t.Character:FindFirstChild("HumanoidRootPart") local h=player.Character and player.Character:FindFirstChild("HumanoidRootPart") if h and tH then h.CFrame=tH.CFrame+Vector3.new(0,0,3) end end
 local function specByName(name) local t=findP(name) local hum=t and t.Character and t.Character:FindFirstChildOfClass("Humanoid") if hum then workspace.CurrentCamera.CameraSubject=hum end end
 local function stopSpec() local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if hum then workspace.CurrentCamera.CameraSubject=hum end end
+
+-- FLING (fixed - findP now exists)
+local flingSavedCF=nil
+local function stopFling()
+	if flingConn then flingConn:Disconnect() flingConn=nil end
+	local c=player.Character
+	if c then
+		local hrp=c:FindFirstChild("HumanoidRootPart")
+		local hum=c:FindFirstChildOfClass("Humanoid")
+		if hrp then
+			hrp.AssemblyLinearVelocity=Vector3.zero
+			hrp.AssemblyAngularVelocity=Vector3.zero
+			if flingSavedCF then hrp.CFrame=flingSavedCF end
+		end
+		if hum then hum.PlatformStand=false hum.Sit=false end
+	end
+	flingSavedCF=nil
+end
+
+local function flingSelected()
+	local targetName=state.selectedPlayer
+	if not targetName or targetName=="None" then warn("[UNIQ] Select a player first") return end
+	local target=findP(targetName)
+	if not target then warn("[UNIQ] Target not found") return end
+	local tchar=target.Character
+	if not tchar then warn("[UNIQ] Target has no character") return end
+	local thrp=tchar:FindFirstChild("HumanoidRootPart") or tchar:FindFirstChild("Torso") or tchar:FindFirstChild("UpperTorso")
+	if not thrp then warn("[UNIQ] Target has no root") return end
+	local c=player.Character
+	if not c then return end
+	local hrp=c:FindFirstChild("HumanoidRootPart")
+	local hum=c:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	if flingConn then flingConn:Disconnect() flingConn=nil end
+	flingSavedCF=hrp.CFrame
+
+	local spin=Vector3.new(0,9e8,0)
+	local vel=Vector3.new(0,9e8,0)
+	local t0=tick()
+
+	flingConn=RunService.Heartbeat:Connect(function()
+		if not player.Character then stopFling() return end
+		local ch=player.Character
+		local root=ch:FindFirstChild("HumanoidRootPart")
+		local h=ch:FindFirstChildOfClass("Humanoid")
+		if not root or not h then stopFling() return end
+
+		local tc=target.Character
+		if not tc then stopFling() return end
+		local tr=tc:FindFirstChild("HumanoidRootPart") or tc:FindFirstChild("Torso") or tc:FindFirstChild("UpperTorso")
+		if not tr then stopFling() return end
+
+		h.PlatformStand=true
+		root.CFrame=tr.CFrame*CFrame.new(0,0.6,0)
+		root.AssemblyLinearVelocity=vel
+		root.AssemblyAngularVelocity=spin
+
+		if tick()-t0>4 then stopFling() end
+	end)
+end
+
 local knownStaff={} local function isStaff(p) if not p or p==player then return false end if knownStaff[p.UserId] then return true end if p.Team then local t=p.Team.Name:lower() if t:find("staff") or t:find("admin") or t:find("mod") then return true end end local ln=p.Name:lower() local ld=(p.DisplayName or ""):lower() return ln:find("admin") or ln:find("mod") or ln:find("staff") or ld:find("admin") or ld:find("mod") or ld:find("staff") end
 local function getSelStaff() local l={} for _,p in ipairs(Players:GetPlayers()) do if p~=player and knownStaff[p.UserId] then table.insert(l,p.Name) end end table.sort(l) return l end
 staffA=Players.PlayerAdded:Connect(function(p) task.wait(1) if isStaff(p) then knownStaff[p.UserId]=p.Name end end) staffR=Players.PlayerRemoving:Connect(function(p) knownStaff[p.UserId]=nil end)
@@ -259,24 +295,23 @@ local function makeKbIcon(parent) local body=nn("Frame",{Size=UDim2.new(0,22,0,1
 
 local oldGui=CoreGui:FindFirstChild("UNIQ") if oldGui then oldGui:Destroy() end
 local Screen=nn("ScreenGui",{Name="UNIQ",ResetOnSpawn=false,IgnoreGuiInset=true,ZIndexBehavior=Enum.ZIndexBehavior.Global,Parent=CoreGui})
-local FULL=UDim2.new(0,783,0,493) -- 5% smaller
-local Win=nn("Frame",{Size=UDim2.new(0,783,0,0),Position=UDim2.new(0.5,-391.5,0.5,0),BackgroundColor3=T.Window,BorderSizePixel=0,ClipsDescendants=true,Visible=false,Parent=Screen})
+local FULL=UDim2.new(0,799,0,503) -- 2% bigger
+local Win=nn("Frame",{Size=UDim2.new(0,799,0,0),Position=UDim2.new(0.5,-399.5,0.5,0),BackgroundColor3=T.Window,BorderSizePixel=0,ClipsDescendants=true,Visible=false,Parent=Screen})
 corner(Win,8) stroke(Win,Color3.fromRGB(32,32,32))
 
--- RAIL (5% smaller)
-local Rail=nn("Frame",{Size=UDim2.new(0,53,1,0),BackgroundColor3=T.Rail,BorderSizePixel=0,Parent=Win}) corner(Rail,8)
-local Logo=nn("ImageLabel",{Size=UDim2.new(0,95,0,95),Position=UDim2.new(0.5,-47.5,0,4),BackgroundTransparency=1,ImageColor3=Color3.new(1,1,1),ScaleType=Enum.ScaleType.Fit,Parent=Rail}) setIcon(Logo,"115384685356525")
-local RailBox=nn("Frame",{Size=UDim2.new(1,0,1,-110),Position=UDim2.new(0,0,0,100),BackgroundTransparency=1,Parent=Rail}) local rl=list(RailBox,12) rl.HorizontalAlignment=Enum.HorizontalAlignment.Center
+local Rail=nn("Frame",{Size=UDim2.new(0,54,1,0),BackgroundColor3=T.Rail,BorderSizePixel=0,Parent=Win}) corner(Rail,8)
+local Logo=nn("ImageLabel",{Size=UDim2.new(0,97,0,97),Position=UDim2.new(0.5,-48.5,0,4),BackgroundTransparency=1,ImageColor3=Color3.new(1,1,1),ScaleType=Enum.ScaleType.Fit,Parent=Rail}) setIcon(Logo,"115384685356525")
+local RailBox=nn("Frame",{Size=UDim2.new(1,0,1,-112),Position=UDim2.new(0,0,0,102),BackgroundTransparency=1,Parent=Rail}) local rl=list(RailBox,12) rl.HorizontalAlignment=Enum.HorizontalAlignment.Center
 
-local Header=nn("Frame",{Size=UDim2.new(1,-53,0,50),Position=UDim2.new(0,53,0,0),BackgroundTransparency=1,Parent=Win})
+local Header=nn("Frame",{Size=UDim2.new(1,-54,0,50),Position=UDim2.new(0,54,0,0),BackgroundTransparency=1,Parent=Win})
 local Crumb=nn("TextLabel",{Size=UDim2.new(0.7,0,1,0),Position=UDim2.new(0,16,0,0),BackgroundTransparency=1,RichText=true,Font=FM,TextSize=14,TextXAlignment=Enum.TextXAlignment.Left,TextColor3=T.Text,Parent=Header})
 local function setCrumb(t) Crumb.Text='<font color="#EBEBEB">UNIQ</font>   <font color="#5A5A5A">&gt;</font>   <font color="#00A6FF">'..t..'</font>' end
 
 local MinBtn=nn("ImageButton",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(1,-38,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,AutoButtonColor=false,Parent=Header}) setIcon(MinBtn,"83381966246889")
 local Gear=nn("ImageButton",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(1,-68,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,AutoButtonColor=false,Parent=Header}) setIcon(Gear,"118523834089694")
 
--- SETTINGS POPUP (transparent outline, shorter, moved left)
-local settingsPop=nn("Frame",{Size=UDim2.new(0,0,0,36),Position=UDim2.new(1,-12,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,ClipsDescendants=true,ZIndex=100,Parent=Header})
+-- SETTINGS POPUP (moved LEFT: right edge now at -60 instead of -12)
+local settingsPop=nn("Frame",{Size=UDim2.new(0,0,0,36),Position=UDim2.new(1,-60,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,ClipsDescendants=true,ZIndex=100,Parent=Header})
 corner(settingsPop,6) stroke(settingsPop,Color3.fromRGB(0,166,255))
 nn("TextLabel",{Text="Menu Key",Font=Fn,TextSize=12,TextColor3=T.ValTxt,BackgroundTransparency=1,Position=UDim2.new(0,10,0,2),Size=UDim2.new(0,60,0,18),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101,Parent=settingsPop})
 local menuKeyBtn=nn("TextButton",{Size=UDim2.new(0,70,0,18),Position=UDim2.new(0,76,0,2),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Text=shortKey(state.menuKey),Font=FB,TextSize=11,TextColor3=T.Accent,AutoButtonColor=false,ZIndex=101,Parent=settingsPop}) corner(menuKeyBtn,4)
@@ -292,7 +327,7 @@ Gear.MouseButton1Click:Connect(function() if settingsPop.Visible then closeSetti
 for _,b in pairs({Gear,MinBtn}) do b.MouseEnter:Connect(function() tw(b,0.15,{ImageColor3=T.Text}) end) b.MouseLeave:Connect(function() tw(b,0.15,{ImageColor3=T.Muted}) end) end
 do local dr,m0,p0 Header.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dr=true m0=i.Position p0=Win.Position i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dr=false end end) end end) UIS.InputChanged:Connect(function(i) if dr and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-m0 Win.Position=UDim2.new(p0.X.Scale,p0.X.Offset+d.X,p0.Y.Scale,p0.Y.Offset+d.Y) end end) end
 local minimized=false MinBtn.MouseButton1Click:Connect(function() minimized=not minimized tw(MinBtn,0.25,{Rotation=minimized and 180 or 0}) tw(Win,0.35,{Size=minimized and UDim2.new(0,300,0,58) or FULL}) end)
-local Content=nn("Frame",{Size=UDim2.new(1,-65,1,-60),Position=UDim2.new(0,59,0,54),BackgroundTransparency=1,Parent=Win})
+local Content=nn("Frame",{Size=UDim2.new(1,-66,1,-60),Position=UDim2.new(0,60,0,54),BackgroundTransparency=1,Parent=Win})
 local Tabs,active={},nil
 local function SwitchTab(name) for nm,t in pairs(Tabs) do local on=(nm==name) t.Page.Visible=on tw(t.Icon,0.18,{ImageColor3=on and T.Accent or T.Muted}) tw(t.Glow,0.3,{ImageTransparency=on and 0.35 or 1}) end active=name setCrumb(name) end
 local function CreateTab(name,iconId,order) local btn=nn("TextButton",{Size=UDim2.new(0,32,0,32),BackgroundTransparency=1,Text="",AutoButtonColor=false,LayoutOrder=order,Parent=RailBox}) local glow=nn("ImageLabel",{Size=UDim2.new(0,34,0,34),Position=UDim2.new(0.5,-17,0.5,-17),BackgroundTransparency=1,ImageColor3=T.Accent,ImageTransparency=1,ScaleType=Enum.ScaleType.Fit,ZIndex=1,Parent=btn}) setIcon(glow,iconId) local icon=nn("ImageLabel",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(0.5,-10,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,ZIndex=2,Parent=btn}) setIcon(icon,iconId) local page=nn("Frame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Visible=false,Parent=Content}) btn.MouseEnter:Connect(function() if active~=name then tw(icon,0.12,{ImageColor3=T.Text}) end end) btn.MouseLeave:Connect(function() if active~=name then tw(icon,0.12,{ImageColor3=T.Muted}) end end) btn.MouseButton1Click:Connect(function() SwitchTab(name) end) local function makeCard(side,title) local card=nn("Frame",{Size=UDim2.new(0.5,-6,1,0),Position=side=="R" and UDim2.new(0.5,6,0,0) or UDim2.new(0,0,0,0),BackgroundColor3=T.Card,BorderSizePixel=0,Parent=page}) corner(card,6) nn("TextLabel",{Text=title,Font=FB,TextSize=14,TextColor3=T.Text,BackgroundTransparency=1,Size=UDim2.new(1,0,0,38),Parent=card}) local sc=nn("ScrollingFrame",{Size=UDim2.new(1,-20,1,-46),Position=UDim2.new(0,10,0,40),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=2,ScrollBarImageColor3=T.Stroke,CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,Parent=card}) list(sc,4) return sc end Tabs[name]={Icon=icon,Glow=glow,Page=page,Left=function(t) return makeCard("L",t) end,Right=function(t) return makeCard("R",t) end} return Tabs[name] end
@@ -340,7 +375,7 @@ local function Dropdown(parent,text,source,default,fn)
     local optsFrame=nn("Frame",{Position=UDim2.new(0,0,0,40),Size=UDim2.new(1,0,0,0),BackgroundColor3=T.SliderBg,BorderSizePixel=0,ClipsDescendants=true,Parent=wrap}) corner(optsFrame,6) local ol=list(optsFrame,2) ol.HorizontalAlignment=Enum.HorizontalAlignment.Center nn("UIPadding",{PaddingTop=UDim.new(0,3),Parent=optsFrame})
     local rowHit=nn("TextButton",{Size=UDim2.new(1,0,0,40),BackgroundTransparency=1,Text="",AutoButtonColor=false,ZIndex=2,Parent=wrap})
     local open=false
-    local function build() for _,c in pairs(optsFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end local opts=(type(source)=="function") and source() or source if not opts or #opts==0 then opts={"(none)"} end for _,opt in ipairs(opts) do local o=nn("TextButton",{Size=UDim2.new(1,-6,0,24),BackgroundColor3=T.Accent,BackgroundTransparency=(opt==current) and 0.8 or 1,AutoButtonColor=false,Text=opt,Font=Fn,TextSize=12,TextColor3=T.Text,Parent=optsFrame}) corner(o,5) o.MouseEnter:Connect(function() tw(o,0.1,{BackgroundTransparency=0.7}) end) o.MouseLeave:Connect(function() tw(o,0.1,{BackgroundTransparency=(o.Text==current) and 0.8 or 1}) end) o.MouseButton1Click:Connect(function() if opt=="(none)" then return end current=opt val.Text=opt if fn then fn(opt) end open=false tw(chev,0.15,{Rotation=0}) tw(optsFrame,0.2,{Size=UDim2.new(1,0,0,0)}) tw(wrap,0.2,{Size=UDim2.new(1,-4,0,46)}) end) end return #opts end
+    local function build() for _,c in pairs(optsFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end local opts=(type(source)=="function") and source() or source if not opts or #opts==0 then opts={"(none)"} end for _,opt in ipairs(opts) do local isFr=state.friends[opt] local o=nn("TextButton",{Size=UDim2.new(1,-6,0,24),BackgroundColor3=T.Accent,BackgroundTransparency=(opt==current) and 0.8 or 1,AutoButtonColor=false,Text=opt,Font=Fn,TextSize=12,TextColor3=isFr and Color3.fromRGB(0,166,255) or T.Text,Parent=optsFrame}) corner(o,5) o.MouseEnter:Connect(function() tw(o,0.1,{BackgroundTransparency=0.7}) end) o.MouseLeave:Connect(function() tw(o,0.1,{BackgroundTransparency=(o.Text==current) and 0.8 or 1}) end) o.MouseButton1Click:Connect(function() if opt=="(none)" then return end current=opt val.Text=opt if fn then fn(opt) end open=false tw(chev,0.15,{Rotation=0}) tw(optsFrame,0.2,{Size=UDim2.new(1,0,0,0)}) tw(wrap,0.2,{Size=UDim2.new(1,-4,0,46)}) end) end return #opts end
     rowHit.MouseButton1Click:Connect(function()
         open=not open
         if open then local n=build() local h=n*26+6 tw(chev,0.15,{Rotation=180}) tw(optsFrame,0.2,{Size=UDim2.new(1,0,0,h)}) tw(wrap,0.2,{Size=UDim2.new(1,-4,0,46+h)})
@@ -353,7 +388,7 @@ local function Button(parent,text,fn) local b=nn("TextButton",{Size=UDim2.new(1,
 UIS.InputBegan:Connect(function(i) if listening then task.wait() local cb=listening listening=nil if i.KeyCode==Enum.KeyCode.Escape or i.KeyCode==Enum.KeyCode.Backspace then cb(nil) return end if i.UserInputType==Enum.UserInputType.Keyboard then cb(i.KeyCode) end end end)
 UIS.InputBegan:Connect(function(i,gp) if gp then return end if state.aimbotActivation=="Toggle" and state.aimbotKey then local k=state.aimbotKey local m=false if typeof(k)=="EnumItem" then if k.EnumType==Enum.KeyCode and i.KeyCode==k then m=true elseif k.EnumType==Enum.UserInputType and i.UserInputType==k then m=true end end if m then state.aimbotToggled=not state.aimbotToggled end end end)
 
--- PREVIEW (15% smaller)
+-- PREVIEW
 local previewPos=UDim2.new(1,-330,0,60)
 local previewGui,previewActive=nil,false
 local function closePreview() if previewGui then local wf=previewGui:FindFirstChild("Frame") if wf then previewPos=wf.Position end previewGui:Destroy() previewGui=nil end previewActive=false end
@@ -368,7 +403,6 @@ local function TogglePreview()
     local top=nn("Frame",{Size=UDim2.new(1,0,0,28),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Parent=win}) corner(top,8) nn("Frame",{Size=UDim2.new(1,0,0,10),Position=UDim2.new(0,0,1,-10),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Parent=top}) nn("TextLabel",{Text="ESP Preview",Font=FB,TextSize=12,TextColor3=T.Text,BackgroundTransparency=1,Size=UDim2.new(1,0,1,0),Parent=top})
     do local dr,m0,p0 top.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dr=true m0=i.Position p0=win.Position i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dr=false end end) end end) UIS.InputChanged:Connect(function(i) if dr and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-m0 win.Position=UDim2.new(p0.X.Scale,p0.X.Offset+d.X,p0.Y.Scale,p0.Y.Offset+d.Y) end end) end
     local cv=nn("Frame",{Size=UDim2.new(1,0,1,-28),Position=UDim2.new(0,0,0,28),BackgroundTransparency=1,ClipsDescendants=true,Parent=win})
-
     local ox=W/2
     local headW,headH,headR=41,50,14
     local torsoW,torsoH=76,82
@@ -404,7 +438,7 @@ local function TogglePreview()
     local conn=RunService.Heartbeat:Connect(function() if not previewActive or not gui.Parent then conn:Disconnect() return end upd() end)
 end
 
--- BUILD TABS (NEW ICONS)
+-- BUILD TABS
 local Combat  = CreateTab("Combat",  "113941213386286", 1)
 local Player  = CreateTab("Player",  "136841993281886", 2)
 local Visuals = CreateTab("Visuals", "72545313930928",  3)
@@ -452,10 +486,35 @@ Value(vR,"Skeleton Thickness",1,5,1,1,"",function(v) SH["Skeleton Thickness"](v)
 Dropdown(vR,"Text Style",function() return DS["Text Style"]() end,"GothamBold",function(v) DH["Text Style"](v) end)
 Button(vR,"Toggle Preview",TogglePreview)
 
--- ONLINE (with Fling Player)
-local oL=Online.Left("Players") Dropdown(oL,"Select Player",function() return DS["Select Player"]() end,"None",function(v) DH["Select Player"](v) end) Dropdown(oL,"Select Staff",function() return DS["Select Staff"]() end,"None",function(v) DH["Select Staff"](v) end)
-local oR=Online.Right("Actions") Button(oR,"Tp to Player",function() BH["Tp to Player"]() end) Button(oR,"Spectate Player",function() BH["Spectate Player"]() end) Button(oR,"Stop Spectating",function() BH["Stop Spectating"]() end) Button(oR,"Fling Player",function() BH["Fling Player"]() end) Button(oR,"Stop Flinging",function() BH["Stop Flinging"]() end)
+-- ONLINE (with working Fling + Friend button)
+local oL=Online.Left("Players")
+Dropdown(oL,"Select Player",function() return DS["Select Player"]() end,"None",function(v)
+	DH["Select Player"](v)
+	if state.friendBtn then
+		state.friendBtn.Text = state.friends[v] and "Remove Friend" or "Add Friend"
+		state.friendBtn.TextColor3 = state.friends[v] and Color3.fromRGB(0,166,255) or T.Text
+	end
+end)
+Dropdown(oL,"Select Staff",function() return DS["Select Staff"]() end,"None",function(v) DH["Select Staff"](v) end)
 
+local oR=Online.Right("Actions")
+Button(oR,"Tp to Player",function() BH["Tp to Player"]() end)
+Button(oR,"Spectate Player",function() BH["Spectate Player"]() end)
+Button(oR,"Stop Spectating",function() BH["Stop Spectating"]() end)
+Button(oR,"Fling Player",function() BH["Fling Player"]() end)
+Button(oR,"Stop Flinging",function() BH["Stop Flinging"]() end)
+local friendBtn=Button(oR,"Add Friend",function()
+	local pName=state.selectedPlayer
+	if pName and pName~="None" then
+		if state.friends[pName] then state.friends[pName]=nil else state.friends[pName]=true end
+		state.friendBtn.Text = state.friends[pName] and "Remove Friend" or "Add Friend"
+		state.friendBtn.TextColor3 = state.friends[pName] and Color3.fromRGB(0,166,255) or T.Text
+		refreshAll()
+	end
+end)
+state.friendBtn=friendBtn
+
+-- MISC
 local mL=Misc.Left("Menu")
 Condition(mL,"Anti-AFK",false,function(v) TH["Anti-AFK"](v) end)
 Condition(mL,"Auto Reattach",true,function(v) TH["Auto Reattach"](v) end)
@@ -471,7 +530,7 @@ local introFinished=false
 do local ac=T.Accent local cb=Color3.fromRGB(20,140,255) local pb=Color3.fromRGB(18,64,120) local pt=Color3.fromRGB(215,240,255) local txt=Color3.fromRGB(240,240,240) local soft=Color3.fromRGB(166,166,176) local ob=Lighting:FindFirstChild("UniqIntroBlur") if ob then ob:Destroy() end local blur=nn("BlurEffect",{Name="UniqIntroBlur",Size=0,Parent=Lighting}) local ov=nn("Frame",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,BorderSizePixel=0,ZIndex=50,Parent=Screen}) local title=nn("TextLabel",{Size=UDim2.new(0,520,0,58),Position=UDim2.new(0.5,0,0.45,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,Text="UNIQ",Font=Enum.Font.GothamBlack,TextSize=42,TextColor3=txt,TextTransparency=1,ZIndex=51,Parent=ov}) local sub=nn("TextLabel",{Size=UDim2.new(0,230,0,22),Position=UDim2.new(0.5,18,0.5,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,Text="Successfully Injected",Font=FM,TextSize=13,TextColor3=txt,TextTransparency=1,ZIndex=51,Parent=ov}) local chk=nn("TextLabel",{Size=UDim2.fromOffset(16,16),Position=UDim2.new(0.5,-62,0.5,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=cb,BackgroundTransparency=1,BorderSizePixel=0,Text="✓",Font=FB,TextSize=15,TextColor3=Color3.new(1,1,1),TextTransparency=1,ZIndex=51,Parent=ov}) corner(chk,8) local line=nn("Frame",{Size=UDim2.new(0,250,0,2),Position=UDim2.new(0.5,0,0.479,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=ac,BackgroundTransparency=1,BorderSizePixel=0,ZIndex=51,Parent=ov}) corner(line,1) nn("UIGradient",{Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(0.18,0.55),NumberSequenceKeypoint.new(0.5,0.08),NumberSequenceKeypoint.new(0.82,0.55),NumberSequenceKeypoint.new(1,1)}),Parent=line}) local stat=nn("Frame",{Size=UDim2.new(0,285,0,30),Position=UDim2.new(0.5,17,0.545,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,ZIndex=50,Parent=ov}) local pr=nn("TextLabel",{Size=UDim2.fromOffset(46,28),Position=UDim2.fromOffset(17,1),BackgroundTransparency=1,Text="Press",Font=Fn,TextSize=13,TextColor3=soft,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=51,Parent=stat}) local pill=nn("TextLabel",{Size=UDim2.fromOffset(56,20),Position=UDim2.fromOffset(60,5),BackgroundColor3=pb,BackgroundTransparency=1,BorderSizePixel=0,Text="RSHIFT",Font=FB,TextSize=10,TextColor3=pt,TextTransparency=1,ZIndex=51,Parent=stat}) corner(pill,3) local ps=stroke(pill,ac) ps.Transparency=1 local stx=nn("TextLabel",{Size=UDim2.new(0,150,1,0),Position=UDim2.fromOffset(129,0),BackgroundTransparency=1,Text="to open the menu",Font=FM,TextSize=13,TextColor3=soft,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=51,Parent=stat}) local IN=TweenInfo.new(1.0,Enum.EasingStyle.Quad,Enum.EasingDirection.Out) local OUT=TweenInfo.new(0.21,Enum.EasingStyle.Quad,Enum.EasingDirection.In) tw(blur,0.64,{Size=18}) TweenService:Create(title,IN,{TextTransparency=0}):Play() TweenService:Create(sub,IN,{TextTransparency=0}):Play() TweenService:Create(chk,IN,{TextTransparency=0,BackgroundTransparency=0}):Play() TweenService:Create(line,IN,{BackgroundTransparency=0.08}):Play() TweenService:Create(pr,IN,{TextTransparency=0}):Play() TweenService:Create(pill,IN,{TextTransparency=0,BackgroundTransparency=0.08}):Play() TweenService:Create(ps,IN,{Transparency=0.35}):Play() TweenService:Create(stx,IN,{TextTransparency=0}):Play() task.delay(3.40,function() TweenService:Create(blur,OUT,{Size=0}):Play() TweenService:Create(title,OUT,{TextTransparency=1}):Play() TweenService:Create(sub,OUT,{TextTransparency=1}):Play() TweenService:Create(chk,OUT,{TextTransparency=1,BackgroundTransparency=1}):Play() TweenService:Create(line,OUT,{BackgroundTransparency=1}):Play() TweenService:Create(pr,OUT,{TextTransparency=1}):Play() TweenService:Create(pill,OUT,{TextTransparency=1,BackgroundTransparency=1}):Play() TweenService:Create(ps,OUT,{Transparency=1}):Play() TweenService:Create(stx,OUT,{TextTransparency=1}):Play() end) task.delay(3.59,function() if ov.Parent then ov:Destroy() end if blur.Parent then blur:Destroy() end introFinished=true end) end
 
 -- BOOK ANIMATION
-local lastPos=UDim2.new(0.5,-391.5,0.5,-246.5) local menuOpen=false local menuAnimating=false
+local lastPos=UDim2.new(0.5,-399.5,0.5,-251.5) local menuOpen=false local menuAnimating=false
 UIS.InputBegan:Connect(function(i,gp)
 	if gp or menuAnimating then return end
 	if introFinished and i.KeyCode==state.menuKey then
@@ -483,15 +542,25 @@ UIS.InputBegan:Connect(function(i,gp)
 			task.delay(0.36,function() menuAnimating=false end)
 		else
 			lastPos=Win.Position
-			local halfH=FULL.Y.Offset/2 local centerY=lastPos.Y.Offset+halfH
+			local halfH2=FULL.Y.Offset/2 local centerY2=lastPos.Y.Offset+halfH2
 			closePreview()
-			tw(Win,0.25,{Size=UDim2.new(FULL.X.Scale,FULL.X.Offset,0,0),Position=UDim2.new(lastPos.X.Scale,lastPos.X.Offset,lastPos.Y.Scale,centerY)})
+			tw(Win,0.25,{Size=UDim2.new(FULL.X.Scale,FULL.X.Offset,0,0),Position=UDim2.new(lastPos.X.Scale,lastPos.X.Offset,lastPos.Y.Scale,centerY2)})
 			task.delay(0.26,function() if not menuOpen then Win.Visible=false end menuAnimating=false end)
 		end
 	end
 end)
 
--- AUTO REATTACH (NEW URL)
-pcall(function() if queue_on_teleport then player.OnTeleport:Connect(function(ts) if ts==Enum.TeleportState.Started and state.autoReattach then pcall(function() queue_on_teleport([[task.wait(1.5) loadstring(game:HttpGet("]] .. SCRIPT_URL .. [["))()]]) end) end end) end end)
+-- AUTO REATTACH
+pcall(function()
+	if queue_on_teleport then
+		player.OnTeleport:Connect(function(ts)
+			if ts==Enum.TeleportState.Started and state.autoReattach then
+				pcall(function()
+					queue_on_teleport('task.wait(1.5) loadstring(game:HttpGet("'..SCRIPT_URL..'"))()')
+				end)
+			end
+		end)
+	end
+end)
 
-SwitchTab("Player") print("[UNIQ] V21 loaded.")
+SwitchTab("Player") print("[UNIQ] V22 loaded.")

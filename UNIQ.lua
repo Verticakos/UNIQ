@@ -264,11 +264,10 @@ local function setupPlayer(plr)
 	if CConns[plr] then CConns[plr]:Disconnect() CConns[plr]=nil end
 	if plr.Character then refreshPlayerVisuals(plr) end
 	CConns[plr]=plr.CharacterAdded:Connect(function()
-		if not state.autoReattach then return end
-		task.wait(0.5)
-		rmAll(plr)
-		refreshPlayerVisuals(plr)
-	end)
+        task.wait(0.5)
+        rmAll(plr)
+        refreshPlayerVisuals(plr)
+    end)
 end
 
 visA=Players.PlayerAdded:Connect(function(plr) task.wait(0.5) setupPlayer(plr) end)
@@ -281,7 +280,6 @@ charConn=player.CharacterAdded:Connect(function()
 	if state.noRagdoll then applyNoRagdoll(true) end
 	flying=false resetControls() setNoClip(state.noclip)
 	if state.flyEnabled then setFly(true) end
-	if state.autoReattach then refreshAll() end
 end)
 if player.Character then cacheCol() setNoClip(state.noclip) if state.noRagdoll then applyNoRagdoll(true) end end
 
@@ -308,7 +306,9 @@ local TH={
 	["No Ragdoll"]=function(e) state.noRagdoll=e applyNoRagdoll(e) end,
 	["High Gravity"]=function(e) state.highGrav=e workspace.Gravity=e and 600 or 196.2 end,
 	["Anti-AFK"]=function(e) state.antiAFK=e if e then if not antiAFKConn then antiAFKConn=player.Idled:Connect(function() local vu=game:GetService("VirtualUser") vu:CaptureController() vu:ClickButton2(Vector2.new(0,0)) end) end else if antiAFKConn then antiAFKConn:Disconnect() antiAFKConn=nil end end end,
-	["Auto Reattach"]=function(e) state.autoReattach=e if e then for _,plr in ipairs(Players:GetPlayers()) do setupPlayer(plr) end refreshAll() end end,
+	["Auto Reattach"] = function(e)
+        state.autoReattach = e
+    end,
 	["NoClip"]=setNoClip,
 	["Enabled"]=function(e) OvE=e refreshAll() end,
 	["Boxes"]=function(e) setVT(e,function(v) BoxE=v end,rmBox) end,
@@ -647,17 +647,18 @@ UIS.InputBegan:Connect(function(i,gp)
 	end
 end)
 
-pcall(function()
-	if queue_on_teleport then
-		player.OnTeleport:Connect(function(ts)
-			if ts == Enum.TeleportState.Started and state.autoReattach then
-				queue_on_teleport([[
-					task.wait(1.5)
-					loadstring(game:HttpGet("https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"))()
-				]])
-			end
-		end)
-	end
+ppcall(function()
+	local queue = queue_on_teleport or (syn and syn.queue_on_teleport)
+	if not queue then return end
+
+	player.OnTeleport:Connect(function(ts)
+		if ts == Enum.TeleportState.Started and state.autoReattach then
+			queue([[
+				task.wait(2)
+				loadstring(game:HttpGet("https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"))()
+			]])
+		end
+	end)
 end)
 
 SwitchTab("Player") print("[UNIQ] V25 loaded.")

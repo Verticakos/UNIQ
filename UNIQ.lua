@@ -1,4 +1,4 @@
---[[ UNIQ V22 — COMPLETE ]]
+--[[ UNIQ V24 — COMPLETE ]]
 local Players=game:GetService("Players") local RunService=game:GetService("RunService")
 local UserInputService=game:GetService("UserInputService") local TweenService=game:GetService("TweenService")
 local CoreGui=game:GetService("CoreGui") local Lighting=game:GetService("Lighting")
@@ -10,12 +10,11 @@ local GEN=(_G.UniqGen or 0)+1 _G.UniqGen=GEN
 local oldPrev=CoreGui:FindFirstChild("UniqPreview") if oldPrev then oldPrev:Destroy() end
 if _G.UniqFovDrawing then pcall(function() _G.UniqFovDrawing:Remove() end) _G.UniqFovDrawing=nil end
 
--- AUTO REATTACH URL
 local SCRIPT_URL = "https://raw.githubusercontent.com/Verticakos/UNIQ/refs/heads/main/UNIQ.lua"
 
 local function httpGet(url) local req=(request or http_request or (syn and syn.request) or (fluxus and fluxus.request)) if req then local ok,r=pcall(req,{Url=url,Method="GET"}) if ok and r and r.Body then return r.Body end end if game.HttpGet then local ok,r=pcall(function() return game:HttpGet(url) end) if ok then return r end end return nil end
 
-local state={walkSpeedEnabled=false,walkSpeedMultiplier=1.0,flyEnabled=false,flySpeed=300,jumpEnabled=false,jumpHeight=7.2,noJumpCooldown=false,infiniteJump=false,autoJump=false,noRagdoll=false,highGrav=false,noclip=false,visualMaxDistance=500,selectedPlayer=nil,selectedStaff=nil,menuKey=Enum.KeyCode.RightShift,autoReattach=true,aimbotEnabled=false,aimbotFov=120,aimbotSmoothX=10,aimbotSmoothY=10,aimbotTargetPart="Head",showFov=false,aimbotKey=nil,aimbotActivation="Hold",aimbotToggled=false,aimMinDist=1,aimMaxDist=500,aimbotIgnoreDead=false,ignoreFriend=false,friends={}}
+local state={walkSpeedEnabled=false,walkSpeedMultiplier=1.0,flyEnabled=false,flySpeed=300,jumpEnabled=false,jumpHeight=7.2,noJumpCooldown=false,infiniteJump=false,autoJump=false,noRagdoll=false,highGrav=false,noclip=false,visualMaxDistance=500,selectedPlayer=nil,selectedStaff=nil,menuKey=Enum.KeyCode.RightShift,autoReattach=true,aimbotEnabled=false,aimbotFov=120,aimbotSmoothX=10,aimbotSmoothY=10,aimbotTargetPart="Head",showFov=false,aimbotKey=nil,aimbotActivation="Hold",aimbotToggled=false,aimMinDist=1,aimMaxDist=500,aimbotIgnoreDead=false,ignoreFriend=false,friends={},aimMethod="Camera"}
 
 local walkConn,noclipConn,flyConn,renderConn,charConn,flyB,flyE,jumpConn,autoJumpConn,aimbotConn,antiAFKConn,flingConn
 local staffA,staffR,visA,visR local flying=false local originalCollision={}
@@ -31,7 +30,7 @@ task.spawn(function() while _G.UniqGen==GEN do task.wait() if state.noJumpCooldo
 jumpConn=UIS.JumpRequest:Connect(function() if state.infiniteJump then local h=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if h and h.Health>0 then h:ChangeState(Enum.HumanoidStateType.Jumping) h.Jump=true end end end)
 autoJumpConn=RunService.Heartbeat:Connect(function() if state.autoJump then local h=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if h and h.Health>0 and h.FloorMaterial~=Enum.Material.Air then h:ChangeState(Enum.HumanoidStateType.Jumping) h.Jump=true end end end)
 
--- AIMBOT
+-- AIMBOT (with multiple methods)
 local fovDrawing=Drawing.new("Circle") fovDrawing.Visible=false fovDrawing.Filled=false fovDrawing.Thickness=1 fovDrawing.Color=Color3.fromRGB(0,166,255) fovDrawing.NumSides=64
 _G.UniqFovDrawing=fovDrawing
 
@@ -42,8 +41,10 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 	if not state.aimbotEnabled then return end
 	local active if state.aimbotActivation=="Toggle" then active=state.aimbotToggled else active=isAimKeyDown() end
 	if not active then return end
+
 	local center=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-	local fovR=state.aimbotFov local best,bestDist=nil,fovR
+	local best,bestDist=nil,state.aimbotFov
+
 	for _,plr in ipairs(Players:GetPlayers()) do
 		if plr~=player and plr.Character then
 			local isFr = state.friends[plr.Name] or state.friends[tostring(plr.UserId)]
@@ -62,8 +63,7 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 						local p=plr.Character:FindFirstChild("UpperTorso") or plr.Character:FindFirstChild("Torso") or plr.Character:FindFirstChild("HumanoidRootPart")
 						if p then aimPos=p.Position end
 					else
-						local p=plr.Character:FindFirstChild("Head")
-						if p then aimPos=p.Position end
+						local p=plr.Character:FindFirstChild("Head") if p then aimPos=p.Position end
 					end
 					if aimPos then
 						local meters=(Camera.CFrame.Position-aimPos).Magnitude*0.28
@@ -76,12 +76,26 @@ aimbotConn=RunService.RenderStepped:Connect(function()
 			end
 		end
 	end
+
 	if best then
-		local camPos=Camera.CFrame.Position local cur=Camera.CFrame.LookVector
-		local target=(best-camPos).Unit
-		local ax=1/math.clamp(state.aimbotSmoothX,1,100) local ay=1/math.clamp(state.aimbotSmoothY,1,100)
-		local mixed=Vector3.new(cur.X+(target.X-cur.X)*ax,cur.Y+(target.Y-cur.Y)*ay,cur.Z+(target.Z-cur.Z)*ax).Unit
-		Camera.CFrame=CFrame.new(camPos,camPos+mixed)
+		if state.aimMethod=="Camera" then
+			local camPos=Camera.CFrame.Position local cur=Camera.CFrame.LookVector
+			local target=(best-camPos).Unit
+			local ax=1/math.clamp(state.aimbotSmoothX,1,100) local ay=1/math.clamp(state.aimbotSmoothY,1,100)
+			local mixed=Vector3.new(cur.X+(target.X-cur.X)*ax,cur.Y+(target.Y-cur.Y)*ay,cur.Z+(target.Z-cur.Z)*ax).Unit
+			Camera.CFrame=CFrame.new(camPos,camPos+mixed)
+
+		elseif state.aimMethod=="MouseMoveRel" then
+			-- Relative mouse movement (mousemoverel)
+			local sp,on=Camera:WorldToViewportPoint(best)
+			if on then
+				local deltaX=sp.X-center.X
+				local deltaY=sp.Y-center.Y
+				local sx=1/math.clamp(state.aimbotSmoothX,1,100)
+				local sy=1/math.clamp(state.aimbotSmoothY,1,100)
+				mousemoverel(deltaX*sx,deltaY*sy)
+			end
+		end
 	end
 end)
 
@@ -97,14 +111,14 @@ local function setFly(on) local c=player.Character if not c or not c:FindFirstCh
 charConn=player.CharacterAdded:Connect(function() task.wait(0.5) cacheCol() applyWalkSpeed() applyJump() if state.noRagdoll then applyNoRagdoll(true) end flying=false resetControls() setNoClip(state.noclip) if state.flyEnabled then setFly(true) end end)
 if player.Character then cacheCol() setNoClip(state.noclip) if state.noRagdoll then applyNoRagdoll(true) end end
 
--- ONLINE / PLAYER LOOKUP (must come before fling)
+-- ONLINE
 local function getSelPlayers() local l={} for _,p in ipairs(Players:GetPlayers()) do if p~=player then table.insert(l,p.Name) end end table.sort(l) return l end
 local function findP(name) if not name or name=="None" then return nil end for _,p in ipairs(Players:GetPlayers()) do if p.Name==name then return p end end return nil end
 local function tpToSel() local t=findP(state.selectedPlayer) local tH=t and t.Character and t.Character:FindFirstChild("HumanoidRootPart") local h=player.Character and player.Character:FindFirstChild("HumanoidRootPart") if h and tH then h.CFrame=tH.CFrame+Vector3.new(0,0,3) end end
 local function specByName(name) local t=findP(name) local hum=t and t.Character and t.Character:FindFirstChildOfClass("Humanoid") if hum then workspace.CurrentCamera.CameraSubject=hum end end
 local function stopSpec() local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if hum then workspace.CurrentCamera.CameraSubject=hum end end
 
--- FLING (fixed - findP now exists)
+-- FLING (instant)
 local flingSavedCF=nil
 local function stopFling()
 	if flingConn then flingConn:Disconnect() flingConn=nil end
@@ -113,8 +127,9 @@ local function stopFling()
 		local hrp=c:FindFirstChild("HumanoidRootPart")
 		local hum=c:FindFirstChildOfClass("Humanoid")
 		if hrp then
-			hrp.AssemblyLinearVelocity=Vector3.zero
-			hrp.AssemblyAngularVelocity=Vector3.zero
+			for _,p in ipairs(c:GetDescendants()) do
+				if p:IsA("BasePart") then p.AssemblyLinearVelocity=Vector3.zero p.AssemblyAngularVelocity=Vector3.zero end
+			end
 			if flingSavedCF then hrp.CFrame=flingSavedCF end
 		end
 		if hum then hum.PlatformStand=false hum.Sit=false end
@@ -125,14 +140,9 @@ end
 local function flingSelected()
 	local targetName=state.selectedPlayer
 	if not targetName or targetName=="None" then warn("[UNIQ] Select a player first") return end
-	local target=findP(targetName)
-	if not target then warn("[UNIQ] Target not found") return end
-	local tchar=target.Character
-	if not tchar then warn("[UNIQ] Target has no character") return end
-	local thrp=tchar:FindFirstChild("HumanoidRootPart") or tchar:FindFirstChild("Torso") or tchar:FindFirstChild("UpperTorso")
-	if not thrp then warn("[UNIQ] Target has no root") return end
-	local c=player.Character
-	if not c then return end
+	local target=findP(targetName) if not target then return end
+	local tchar=target.Character if not tchar then return end
+	local c=player.Character if not c then return end
 	local hrp=c:FindFirstChild("HumanoidRootPart")
 	local hum=c:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum then return end
@@ -140,28 +150,33 @@ local function flingSelected()
 	if flingConn then flingConn:Disconnect() flingConn=nil end
 	flingSavedCF=hrp.CFrame
 
-	local spin=Vector3.new(0,9e8,0)
-	local vel=Vector3.new(0,9e8,0)
-	local t0=tick()
+	local tr=tchar:FindFirstChild("HumanoidRootPart") or tchar:FindFirstChild("Torso") or tchar:FindFirstChild("UpperTorso")
+	if not tr then return end
 
-	flingConn=RunService.Heartbeat:Connect(function()
-		if not player.Character then stopFling() return end
-		local ch=player.Character
+	hum.PlatformStand=true
+	hrp.CFrame=tr.CFrame
+
+	-- INSTANT fling
+	hrp.AssemblyLinearVelocity=Vector3.new(9e7,9e7,9e7)
+	hrp.AssemblyAngularVelocity=Vector3.new(9e7,9e7,9e7)
+
+	local frames=0
+	flingConn=RunService.Stepped:Connect(function()
+		frames=frames+1
+		local ch=player.Character if not ch then stopFling() return end
 		local root=ch:FindFirstChild("HumanoidRootPart")
 		local h=ch:FindFirstChildOfClass("Humanoid")
 		if not root or not h then stopFling() return end
-
-		local tc=target.Character
-		if not tc then stopFling() return end
-		local tr=tc:FindFirstChild("HumanoidRootPart") or tc:FindFirstChild("Torso") or tc:FindFirstChild("UpperTorso")
-		if not tr then stopFling() return end
+		local tc=target.Character if not tc then stopFling() return end
+		local t=tc:FindFirstChild("HumanoidRootPart") or tc:FindFirstChild("Torso") or tc:FindFirstChild("UpperTorso")
+		if not t then stopFling() return end
 
 		h.PlatformStand=true
-		root.CFrame=tr.CFrame*CFrame.new(0,0.6,0)
-		root.AssemblyLinearVelocity=vel
-		root.AssemblyAngularVelocity=spin
+		root.CFrame=t.CFrame
+		root.AssemblyLinearVelocity=Vector3.new(9e7,9e7,9e7)
+		root.AssemblyAngularVelocity=Vector3.new(9e7,9e7,9e7)
 
-		if tick()-t0>4 then stopFling() end
+		if frames>60 then stopFling() end
 	end)
 end
 
@@ -205,7 +220,7 @@ renderConn=RunService.RenderStepped:Connect(function()
 		if SkelE then local cn=gC(c) if not Skels[p] or Skels[p].n~=#cn then mkSkel(p) end local d=Skels[p] if d then for i,pair in ipairs(cn) do local a=c:FindFirstChild(pair[1]) local b=c:FindFirstChild(pair[2]) local l=d.lines[i] if a and b and l then local p1,v1=Camera:WorldToViewportPoint(a.Position) local p2,v2=Camera:WorldToViewportPoint(b.Position) if v1 and v2 then local x=Vector2.new(p1.X,p1.Y) local y=Vector2.new(p2.X,p2.Y) local dir=y-x if dir.Magnitude>0 then dir=dir.Unit x=x-dir*JO y=y+dir*JO end l.Visible=true l.Color=SCol l.Thickness=SKT l.From=x l.To=y else l.Visible=false end elseif l then l.Visible=false end end end else rmSkel(p) end
 		if TrE then if not Trs[p] then mkTr(p) end local l=Trs[p] if root and l then local pos,on=Camera:WorldToViewportPoint(root.Position) if on then l.Visible=true l.Color=TCol l.Thickness=TracerThick l.From=Vector2.new(vp.X/2,vp.Y) l.To=Vector2.new(pos.X,pos.Y) else l.Visible=false end elseif l then l.Visible=false end else rmTr(p) end
 		if DistE then if not DLabels[p] then mkLbl(p,DLabels,{size=UDim2.fromOffset(120,20),off=Vector3.new(0,-4.5,0)}) end local lb=DLabels[p] if lb and root then local g=lb.Parent if g then g.StudsOffsetWorldSpace=Vector3.new(0,-4.5-math.clamp(studs/120,0,1.2),0) end lb.Text=math.floor(meters).."m" lb.TextSize=math.clamp(18-studs/20,10,18) end else rmDist(p) end
-		if NameE or DisplayTagsE then local tagText=DisplayTagsE and p.DisplayName or p.Name if not NLabels[p] then mkLbl(p,NLabels,{size=UDim2.new(140,20),off=Vector3.new(0,4.3,0),text=tagText}) end local lb=NLabels[p] if lb and root then local g=lb.Parent if g then g.StudsOffsetWorldSpace=Vector3.new(0,4.3+math.clamp(studs/120,0,1.2),0) end local isFr = state.friends[p.Name] or state.friends[tostring(p.UserId)] lb.TextColor3 = isFr and Color3.fromRGB(0,166,255) or Color3.new(1,1,1) lb.TextSize=math.clamp(18-studs/20,10,18) lb.Text=tagText end else rmNm(p) end
+		if NameE or DisplayTagsE then local tagText=DisplayTagsE and p.DisplayName or p.Name if not NLabels[p] then mkLbl(p,NLabels,{size=UDim2.new(140,20),off=Vector3.new(0,4.3,0),text=tagText}) end local lb=NLabels[p] if lb and root then local g=lb.Parent if g then g.StudsOffsetWorldSpace=Vector3.new(0,4.3+math.clamp(studs/120,0,1.2),0) end local isFr=state.friends[p.Name] or state.friends[tostring(p.UserId)] lb.TextColor3=isFr and Color3.fromRGB(0,166,255) or Color3.new(1,1,1) lb.TextSize=math.clamp(18-studs/20,10,18) lb.Text=tagText end else rmNm(p) end
 		if BoxE then if not Boxes[p] then mkBox(p) end local box=Boxes[p] if box and root then local dB=meters>20 and math.clamp((meters-20)/95,0,0.38) or 0 local fB=meters>180 and math.clamp((meters-180)/45,0,1.2) or 0 local fL=meters>100 and math.clamp((meters-100)/90,0,0.08) or 0 box.Size=UDim2.new(BBW+dB+fB,0,BBH+dB*0.75+fB*1.1,0) local fr=box:FindFirstChild("Frame") if fr then local s=fr:FindFirstChildOfClass("UIStroke") if s then s.Color=BCol s.Thickness=BoxThick s.Transparency=CornE and 1 or 0 end local cS=0.34+dB*0.018 local vS=0.14+dB*0.01+fL local cT=math.max(1,BoxThick-(dB*0.45)) for _,ch in ipairs(fr:GetChildren()) do if ch:IsA("Frame") then if ch.Name:sub(1,1)=="H" then ch.Size=UDim2.new(cS,0,0,cT) else ch.Size=UDim2.new(0,cT,vS,0) end end end end end else rmBox(p) end
 	end
 end)
@@ -295,7 +310,7 @@ local function makeKbIcon(parent) local body=nn("Frame",{Size=UDim2.new(0,22,0,1
 
 local oldGui=CoreGui:FindFirstChild("UNIQ") if oldGui then oldGui:Destroy() end
 local Screen=nn("ScreenGui",{Name="UNIQ",ResetOnSpawn=false,IgnoreGuiInset=true,ZIndexBehavior=Enum.ZIndexBehavior.Global,Parent=CoreGui})
-local FULL=UDim2.new(0,799,0,503) -- 2% bigger
+local FULL=UDim2.new(0,799,0,503)
 local Win=nn("Frame",{Size=UDim2.new(0,799,0,0),Position=UDim2.new(0.5,-399.5,0.5,0),BackgroundColor3=T.Window,BorderSizePixel=0,ClipsDescendants=true,Visible=false,Parent=Screen})
 corner(Win,8) stroke(Win,Color3.fromRGB(32,32,32))
 
@@ -310,19 +325,19 @@ local function setCrumb(t) Crumb.Text='<font color="#EBEBEB">UNIQ</font>   <font
 local MinBtn=nn("ImageButton",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(1,-38,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,AutoButtonColor=false,Parent=Header}) setIcon(MinBtn,"83381966246889")
 local Gear=nn("ImageButton",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(1,-68,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,AutoButtonColor=false,Parent=Header}) setIcon(Gear,"118523834089694")
 
--- SETTINGS POPUP (moved LEFT: right edge now at -60 instead of -12)
-local settingsPop=nn("Frame",{Size=UDim2.new(0,0,0,36),Position=UDim2.new(1,-60,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,ClipsDescendants=true,ZIndex=100,Parent=Header})
+-- SETTINGS POPUP
+local settingsPop=nn("Frame",{Size=UDim2.new(0,0,0,42),Position=UDim2.new(1,-60,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,ClipsDescendants=true,ZIndex=100,Parent=Header})
 corner(settingsPop,6) stroke(settingsPop,Color3.fromRGB(0,166,255))
-nn("TextLabel",{Text="Menu Key",Font=Fn,TextSize=12,TextColor3=T.ValTxt,BackgroundTransparency=1,Position=UDim2.new(0,10,0,2),Size=UDim2.new(0,60,0,18),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101,Parent=settingsPop})
-local menuKeyBtn=nn("TextButton",{Size=UDim2.new(0,70,0,18),Position=UDim2.new(0,76,0,2),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Text=shortKey(state.menuKey),Font=FB,TextSize=11,TextColor3=T.Accent,AutoButtonColor=false,ZIndex=101,Parent=settingsPop}) corner(menuKeyBtn,4)
+nn("TextLabel",{Text="Menu Key",Font=Fn,TextSize=13,TextColor3=T.ValTxt,BackgroundTransparency=1,Position=UDim2.new(0,12,0.5,0),AnchorPoint=Vector2.new(0,0.5),Size=UDim2.new(0,70,0,20),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101,Parent=settingsPop})
+local menuKeyBtn=nn("TextButton",{Size=UDim2.new(0,76,0,22),Position=UDim2.new(1,-18,0.5,0),AnchorPoint=Vector2.new(1,0.5),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Text=shortKey(state.menuKey),Font=FB,TextSize=11,TextColor3=T.Accent,AutoButtonColor=false,ZIndex=101,Parent=settingsPop}) corner(menuKeyBtn,4)
 
 local popListening=false
 menuKeyBtn.MouseButton1Click:Connect(function() popListening=true menuKeyBtn.Text="..." menuKeyBtn.TextColor3=Color3.new(1,1,1) end)
 UIS.InputBegan:Connect(function(i,gp) if popListening and not gp then popListening=false if i.KeyCode==Enum.KeyCode.Escape or i.KeyCode==Enum.KeyCode.Backspace then state.menuKey=Enum.KeyCode.RightShift elseif i.UserInputType==Enum.UserInputType.Keyboard then state.menuKey=i.KeyCode end menuKeyBtn.Text=shortKey(state.menuKey) menuKeyBtn.TextColor3=T.Accent end end)
 local outsideHit=nn("TextButton",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Text="",Visible=false,ZIndex=95,Parent=Screen})
-local function closeSettings() tw(settingsPop,0.18,{Size=UDim2.new(0,0,0,36)}) task.delay(0.19,function() settingsPop.Visible=false outsideHit.Visible=false end) end
+local function closeSettings() tw(settingsPop,0.18,{Size=UDim2.new(0,0,0,42)}) task.delay(0.19,function() settingsPop.Visible=false outsideHit.Visible=false end) end
 outsideHit.MouseButton1Click:Connect(closeSettings)
-Gear.MouseButton1Click:Connect(function() if settingsPop.Visible then closeSettings() else settingsPop.Visible=true outsideHit.Visible=true settingsPop.Size=UDim2.new(0,0,0,36) tw(settingsPop,0.22,{Size=UDim2.new(0,160,0,36)}) end end)
+Gear.MouseButton1Click:Connect(function() if settingsPop.Visible then closeSettings() else settingsPop.Visible=true outsideHit.Visible=true settingsPop.Size=UDim2.new(0,0,0,42) tw(settingsPop,0.22,{Size=UDim2.new(0,215,0,42)}) end end)
 
 for _,b in pairs({Gear,MinBtn}) do b.MouseEnter:Connect(function() tw(b,0.15,{ImageColor3=T.Text}) end) b.MouseLeave:Connect(function() tw(b,0.15,{ImageColor3=T.Muted}) end) end
 do local dr,m0,p0 Header.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dr=true m0=i.Position p0=Win.Position i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dr=false end end) end end) UIS.InputChanged:Connect(function(i) if dr and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-m0 Win.Position=UDim2.new(p0.X.Scale,p0.X.Offset+d.X,p0.Y.Scale,p0.Y.Offset+d.Y) end end) end
@@ -330,7 +345,29 @@ local minimized=false MinBtn.MouseButton1Click:Connect(function() minimized=not 
 local Content=nn("Frame",{Size=UDim2.new(1,-66,1,-60),Position=UDim2.new(0,60,0,54),BackgroundTransparency=1,Parent=Win})
 local Tabs,active={},nil
 local function SwitchTab(name) for nm,t in pairs(Tabs) do local on=(nm==name) t.Page.Visible=on tw(t.Icon,0.18,{ImageColor3=on and T.Accent or T.Muted}) tw(t.Glow,0.3,{ImageTransparency=on and 0.35 or 1}) end active=name setCrumb(name) end
-local function CreateTab(name,iconId,order) local btn=nn("TextButton",{Size=UDim2.new(0,32,0,32),BackgroundTransparency=1,Text="",AutoButtonColor=false,LayoutOrder=order,Parent=RailBox}) local glow=nn("ImageLabel",{Size=UDim2.new(0,34,0,34),Position=UDim2.new(0.5,-17,0.5,-17),BackgroundTransparency=1,ImageColor3=T.Accent,ImageTransparency=1,ScaleType=Enum.ScaleType.Fit,ZIndex=1,Parent=btn}) setIcon(glow,iconId) local icon=nn("ImageLabel",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(0.5,-10,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,ZIndex=2,Parent=btn}) setIcon(icon,iconId) local page=nn("Frame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Visible=false,Parent=Content}) btn.MouseEnter:Connect(function() if active~=name then tw(icon,0.12,{ImageColor3=T.Text}) end end) btn.MouseLeave:Connect(function() if active~=name then tw(icon,0.12,{ImageColor3=T.Muted}) end end) btn.MouseButton1Click:Connect(function() SwitchTab(name) end) local function makeCard(side,title) local card=nn("Frame",{Size=UDim2.new(0.5,-6,1,0),Position=side=="R" and UDim2.new(0.5,6,0,0) or UDim2.new(0,0,0,0),BackgroundColor3=T.Card,BorderSizePixel=0,Parent=page}) corner(card,6) nn("TextLabel",{Text=title,Font=FB,TextSize=14,TextColor3=T.Text,BackgroundTransparency=1,Size=UDim2.new(1,0,0,38),Parent=card}) local sc=nn("ScrollingFrame",{Size=UDim2.new(1,-20,1,-46),Position=UDim2.new(0,10,0,40),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=2,ScrollBarImageColor3=T.Stroke,CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,Parent=card}) list(sc,4) return sc end Tabs[name]={Icon=icon,Glow=glow,Page=page,Left=function(t) return makeCard("L",t) end,Right=function(t) return makeCard("R",t) end} return Tabs[name] end
+
+local function CreateTab(name,iconId,order)
+	local btn=nn("TextButton",{Size=UDim2.new(0,32,0,32),BackgroundTransparency=1,Text="",AutoButtonColor=false,LayoutOrder=order,Parent=RailBox})
+	local glow=nn("ImageLabel",{Size=UDim2.new(0,34,0,34),Position=UDim2.new(0.5,-17,0.5,-17),BackgroundTransparency=1,ImageColor3=T.Accent,ImageTransparency=1,ScaleType=Enum.ScaleType.Fit,ZIndex=1,Parent=btn}) setIcon(glow,iconId)
+	local icon=nn("ImageLabel",{Size=UDim2.new(0,20,0,20),Position=UDim2.new(0.5,-10,0.5,-10),BackgroundTransparency=1,ImageColor3=T.Muted,ScaleType=Enum.ScaleType.Fit,ZIndex=2,Parent=btn}) setIcon(icon,iconId)
+	local page=nn("Frame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Visible=false,Parent=Content})
+
+	btn.MouseEnter:Connect(function() if active~=name then tw(icon,0.12,{ImageColor3=T.Text}) end end)
+	btn.MouseLeave:Connect(function() if active~=name then tw(icon,0.12,{ImageColor3=T.Muted}) end end)
+	btn.MouseButton1Click:Connect(function() SwitchTab(name) end)
+
+	local function makeCard(side,title)
+		local card=nn("Frame",{Size=UDim2.new(0.5,-6,1,0),Position=side=="R" and UDim2.new(0.5,6,0,0) or UDim2.new(0,0,0,0),BackgroundColor3=T.Card,BorderSizePixel=0,Parent=page})
+		corner(card,6)
+		nn("TextLabel",{Text=title,Font=FB,TextSize=14,TextColor3=T.Text,BackgroundTransparency=1,Size=UDim2.new(1,0,0,38),Parent=card})
+		local sc=nn("ScrollingFrame",{Size=UDim2.new(1,-20,1,-46),Position=UDim2.new(0,10,0,40),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=3,ScrollBarImageColor3=T.Accent,CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,Parent=card})
+		list(sc,4)
+		return sc
+	end
+
+	Tabs[name]={Icon=icon,Glow=glow,Page=page,Left=function(t) return makeCard("L",t) end,Right=function(t) return makeCard("R",t) end}
+	return Tabs[name]
+end
 
 local listening=nil
 local function Condition(parent,text,default,fn,indent)
@@ -363,7 +400,7 @@ local function KeybindRow(parent,text,default,cb)
     return {Get=function() return cur end,Row=r}
 end
 
-local function Value(parent,text,min,max,default,dec,suffix,fn) local wrap=nn("Frame",{Size=UDim2.new(1,-4,0,52),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Parent=parent}) corner(wrap,6) local val=default nn("TextLabel",{Text=text,Font=Fn,TextSize=13,TextColor3=T.Text,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,Position=UDim2.new(0,12,0,0),Size=UDim2.new(0.6,0,0,24),Parent=wrap}) local num=nn("TextLabel",{Text=string.format("%."..dec.."f",val)..(suffix or ""),Font=Fn,TextSize=13,TextColor3=T.ValTxt,TextXAlignment=Enum.TextXAlignment.Right,BackgroundTransparency=1,Position=UDim2.new(0.4,0,0,0),Size=UDim2.new(0.6,-12,0,24),Parent=wrap}) local trackFrame=nn("Frame",{Size=UDim2.new(1,-24,0,2),Position=UDim2.new(0,12,0,34),BackgroundTransparency=1,BorderSizePixel=0,Parent=wrap}) nn("Frame",{Size=UDim2.new(1,0,0,2),BackgroundColor3=T.Accent,BorderSizePixel=0,Parent=trackFrame}) local fill=nn("Frame",{Size=UDim2.new(math.clamp((val-min)/(max-min),0,1),0,1,0),BackgroundColor3=T.Accent,BorderSizePixel=0,Parent=trackFrame}) local hit=nn("TextButton",{Size=UDim2.new(1,-24,0,20),Position=UDim2.new(0,12,0,26),BackgroundTransparency=1,Text="",Parent=wrap}) local sl=false local function apply(px) local a=math.clamp((px-trackFrame.AbsolutePosition.X)/trackFrame.AbsoluteSize.X,0,1) local raw=min+(max-min)*a val=(dec==0) and math.floor(raw+0.5) or tonumber(string.format("%."..dec.."f",raw)) fill.Size=UDim2.new(a,0,1,0) num.Text=string.format("%."..dec.."f",val)..(suffix or "") if fn then fn(val) end end hit.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=true apply(i.Position.X) end end) UIS.InputChanged:Connect(function(i) if sl and i.UserInputType==Enum.UserInputType.MouseMovement then apply(i.Position.X) end end) UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=false end end) return {Get=function() return val end} end
+local function Value(parent,text,min,max,default,dec,suffix,fn) local wrap=nn("Frame",{Size=UDim2.new(1,-4,0,52),BackgroundColor3=T.SliderBg,BorderSizePixel=0,Parent=parent}) corner(wrap,6) local val=default nn("TextLabel",{Text=text,Font=Fn,TextSize=13,TextColor3=T.Text,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1,Position=UDim2.new(0,12,0,0),Size=UDim2.new(0.6,0,0,24),Parent=wrap}) local num=nn("TextLabel",{Text=string.format("%."..dec.."f",val)..(suffix or ""),Font=Fn,TextSize=13,TextColor3=T.ValTxt,TextXAlignment=Enum.TextXAlignment.Right,BackgroundTransparency=1,Position=UDim2.new(0.4,0,0,0),Size=UDim2.new(0.6,-12,0,24),Parent=wrap}) local trackFrame=nn("Frame",{Size=UDim2.new(1,-24,0,2),Position=UDim2.new(0,12,0,34),BackgroundTransparency=1,BorderSizePixel=0,Parent=wrap}) nn("Frame",{Size=UDim2.new(1,0,0,2),BackgroundColor3=Color3.fromRGB(55,55,55),BorderSizePixel=0,Parent=trackFrame}) local fill=nn("Frame",{Size=UDim2.new(math.clamp((val-min)/(max-min),0,1),0,1,0),BackgroundColor3=T.Accent,BorderSizePixel=0,Parent=trackFrame}) local hit=nn("TextButton",{Size=UDim2.new(1,-24,0,20),Position=UDim2.new(0,12,0,26),BackgroundTransparency=1,Text="",Parent=wrap}) local sl=false local function apply(px) local a=math.clamp((px-trackFrame.AbsolutePosition.X)/trackFrame.AbsoluteSize.X,0,1) local raw=min+(max-min)*a val=(dec==0) and math.floor(raw+0.5) or tonumber(string.format("%."..dec.."f",raw)) fill.Size=UDim2.new(a,0,1,0) num.Text=string.format("%."..dec.."f",val)..(suffix or "") if fn then fn(val) end end hit.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=true apply(i.Position.X) end end) UIS.InputChanged:Connect(function(i) if sl and i.UserInputType==Enum.UserInputType.MouseMovement then apply(i.Position.X) end end) UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=false end end) return {Get=function() return val end} end
 
 local function Dropdown(parent,text,source,default,fn)
     local wrap=nn("Frame",{Size=UDim2.new(1,-4,0,46),BackgroundTransparency=1,ClipsDescendants=true,Parent=parent})
@@ -460,11 +497,12 @@ Value(cR,"Horizontal Smoothing",1,100,10,0,"",function(v) SH["Horizontal Smoothi
 Value(cR,"Vertical Smoothing",1,100,10,0,"",function(v) SH["Vertical Smoothing"](v) end)
 Value(cR,"Min Distance",1,100,1,0,"",function(v) SH["Aim Min Distance"](v) end)
 Value(cR,"Max Distance",1,500,500,0,"",function(v) SH["Aim Max Distance"](v) end)
+Dropdown(cR,"Aim Method",{"Camera","MouseMoveRel"},"Camera",function(v) state.aimMethod=v end)
 
 -- PLAYER
 local pL=Player.Left("Conditions")
 Condition(pL,"Speed",false,function(v) TH["Toggle"](v,"Speed") end) Condition(pL,"Fly",false,function(v) TH["Toggle"](v,"Fly") end) Condition(pL,"Super Jump",false,function(v) TH["Toggle"](v,"Super Jump") end) Condition(pL,"Infinite Jump",false,function(v) TH["Infinite Jump"](v) end) Condition(pL,"Auto Jump",false,function(v) TH["Auto Jump"](v) end) Condition(pL,"No Jump Cooldown",false,function(v) TH["No Jump Cooldown"](v) end) Condition(pL,"No Ragdoll",false,function(v) TH["No Ragdoll"](v) end) Condition(pL,"High Gravity",false,function(v) TH["High Gravity"](v) end) Condition(pL,"NoClip",false,function(v) TH["NoClip"](v) end)
-local pR=Player.Right("Customization") Value(pR,"Walk Speed",1,50,1.0,1,"",function(v) SH["Walk Speed"](v) end) Value(pR,"Fly Speed",50,500,300,0,"",function(v) SH["Fly Speed"](v) end) Value(pR,"Jump Height",7.2,50,7.2,1,"",function(v) SH["Jump Height"](v) end)
+local pR=Player.Right("Customization") Value(pR,"Walk Speed",1,50,1.0,1,"",function(v) SH["Walk Speed"](v) end) Value(pR,"Fly Speed",50,500,300,0,"",function(v) SH["Fly Speed"](v) end) Value(pR,"Jump Height",7.2,100,7.2,1,"",function(v) SH["Jump Height"](v) end)
 
 -- VISUALS
 local vL=Visuals.Left("Conditions") Condition(vL,"Enabled",false,function(v) TH["Enabled"](v) end)
@@ -486,17 +524,12 @@ Value(vR,"Skeleton Thickness",1,5,1,1,"",function(v) SH["Skeleton Thickness"](v)
 Dropdown(vR,"Text Style",function() return DS["Text Style"]() end,"GothamBold",function(v) DH["Text Style"](v) end)
 Button(vR,"Toggle Preview",TogglePreview)
 
--- ONLINE (with working Fling + Friend button)
 local oL=Online.Left("Players")
 Dropdown(oL,"Select Player",function() return DS["Select Player"]() end,"None",function(v)
 	DH["Select Player"](v)
-	if state.friendBtn then
-		state.friendBtn.Text = state.friends[v] and "Remove Friend" or "Add Friend"
-		state.friendBtn.TextColor3 = state.friends[v] and Color3.fromRGB(0,166,255) or T.Text
-	end
+	if state.friendBtn then state.friendBtn.Text=state.friends[v] and "Remove Friend" or "Add Friend" state.friendBtn.TextColor3=state.friends[v] and Color3.fromRGB(0,166,255) or T.Text end
 end)
 Dropdown(oL,"Select Staff",function() return DS["Select Staff"]() end,"None",function(v) DH["Select Staff"](v) end)
-
 local oR=Online.Right("Actions")
 Button(oR,"Tp to Player",function() BH["Tp to Player"]() end)
 Button(oR,"Spectate Player",function() BH["Spectate Player"]() end)
@@ -507,14 +540,13 @@ local friendBtn=Button(oR,"Add Friend",function()
 	local pName=state.selectedPlayer
 	if pName and pName~="None" then
 		if state.friends[pName] then state.friends[pName]=nil else state.friends[pName]=true end
-		state.friendBtn.Text = state.friends[pName] and "Remove Friend" or "Add Friend"
-		state.friendBtn.TextColor3 = state.friends[pName] and Color3.fromRGB(0,166,255) or T.Text
+		state.friendBtn.Text=state.friends[pName] and "Remove Friend" or "Add Friend"
+		state.friendBtn.TextColor3=state.friends[pName] and Color3.fromRGB(0,166,255) or T.Text
 		refreshAll()
 	end
 end)
 state.friendBtn=friendBtn
 
--- MISC
 local mL=Misc.Left("Menu")
 Condition(mL,"Anti-AFK",false,function(v) TH["Anti-AFK"](v) end)
 Condition(mL,"Auto Reattach",true,function(v) TH["Auto Reattach"](v) end)
@@ -550,17 +582,14 @@ UIS.InputBegan:Connect(function(i,gp)
 	end
 end)
 
--- AUTO REATTACH
 pcall(function()
 	if queue_on_teleport then
 		player.OnTeleport:Connect(function(ts)
 			if ts==Enum.TeleportState.Started and state.autoReattach then
-				pcall(function()
-					queue_on_teleport('task.wait(1.5) loadstring(game:HttpGet("'..SCRIPT_URL..'"))()')
-				end)
+				pcall(function() queue_on_teleport('task.wait(1.5) loadstring(game:HttpGet("'..SCRIPT_URL..'"))()') end)
 			end
 		end)
 	end
 end)
 
-SwitchTab("Player") print("[UNIQ] V22 loaded.")
+SwitchTab("Player") print("[UNIQ] V24 loaded.")

@@ -146,88 +146,207 @@ local function setFly(on)
 		r.AssemblyLinearVelocity=vel
 	end)
 end
-
 -- ONLINE / LOOKUP
 local function getSelPlayers() local l={} for _,p in ipairs(Players:GetPlayers()) do if p~=player then table.insert(l,state.playerListTagStyle=="Display Tags" and p.DisplayName or p.Name) end end table.sort(l) return l end
 local function findP(name) if not name or name=="None" then return nil end for _,p in ipairs(Players:GetPlayers()) do if p.Name==name or p.DisplayName==name then return p end end return nil end
 local function tpToSel() local t=findP(state.selectedPlayer) local tH=t and t.Character and t.Character:FindFirstChild("HumanoidRootPart") local h=player.Character and player.Character:FindFirstChild("HumanoidRootPart") if h and tH then h.CFrame=tH.CFrame+Vector3.new(0,0,3) end end
 local function specByName(name) local t=findP(name) local hum=t and t.Character and t.Character:FindFirstChildOfClass("Humanoid") if hum then workspace.CurrentCamera.CameraSubject=hum end end
 local function stopSpec() local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if hum then workspace.CurrentCamera.CameraSubject=hum end end
+-- ============ ANTI FLING ============
+local antiFling = false
+local antiFlingConn = nil
 
--- ============ FLING (REWRITTEN — alternating velocity method) ============
-local flingActive=false
-local flingSavedCF=nil
+local function setAntiFling(on)
+	antiFling = on
 
-local function stopFling()
-	flingActive=false
-	task.wait(0.1)
-	local c=player.Character
-	if c then
-		local hrp=c:FindFirstChild("HumanoidRootPart")
-		local hum=c:FindFirstChildOfClass("Humanoid")
-		if hrp then
-			hrp.Velocity=Vector3.zero
-			hrp.RotVelocity=Vector3.zero
-			hrp.AssemblyLinearVelocity=Vector3.zero
-			hrp.AssemblyAngularVelocity=Vector3.zero
-			if flingSavedCF then hrp.CFrame=flingSavedCF end
-		end
-		if hum then hum.Sit=false hum.PlatformStand=false end
+	if antiFlingConn then
+		antiFlingConn:Disconnect()
+		antiFlingConn = nil
 	end
-	flingSavedCF=nil
-end
 
+	if not on then return end
 
-local function flingSelected()
-	if flingActive then stopFling() return end
-	local targetName=state.selectedPlayer
-	if not targetName or targetName=="None" then warn("[UNIQ] Select a player first") return end
-	local target=findP(targetName)
-	if not target then warn("[UNIQ] Target not found") return end
+	antiFlingConn = RunService.Heartbeat:Connect(function()
+		local c = player.Character
+		if not c then return end
+		local hrp = c:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
 
-	local c=player.Character
-	if not c then return end
-	local hrp=c:FindFirstChild("HumanoidRootPart")
-	local hum=c:FindFirstChildOfClass("Humanoid")
-	if not hrp or not hum then return end
-
-	flingSavedCF=hrp.CFrame
-	flingActive=true
-
-	task.spawn(function()
-		local startTime=tick()
-		while flingActive and tick()-startTime<5 do
-			local ch=player.Character
-			if not ch then break end
-			local root=ch:FindFirstChild("HumanoidRootPart")
-			if not root then break end
-			local tc=target.Character
-			if not tc then break end
-			local tr=tc:FindFirstChild("HumanoidRootPart") or tc:FindFirstChild("Torso") or tc:FindFirstChild("UpperTorso")
-			if not tr then break end
-
-			-- Phase 1: above target with positive velocity
-			root.CFrame=tr.CFrame*CFrame.new(0,1.5,0)
-			root.Velocity=Vector3.new(9999,9999,9999)
-			root.RotVelocity=Vector3.new(9999,9999,9999)
-			RunService.Heartbeat:Wait()
-
-			if not flingActive then break end
-			ch=player.Character if not ch then break end
-			root=ch:FindFirstChild("HumanoidRootPart") if not root then break end
-			tc=target.Character if not tc then break end
-			tr=tc:FindFirstChild("HumanoidRootPart") or tc:FindFirstChild("Torso") or tc:FindFirstChild("UpperTorso")
-			if not tr then break end
-
-			-- Phase 2: below target with negative velocity
-			root.CFrame=tr.CFrame*CFrame.new(0,-1.5,0)
-			root.Velocity=Vector3.new(-9999,-9999,-9999)
-			root.RotVelocity=Vector3.new(-9999,-9999,-9999)
-			RunService.Heartbeat:Wait()
+		-- stop high velocity / spin flings
+		if hrp.AssemblyLinearVelocity.Magnitude > 80 then
+			hrp.AssemblyLinearVelocity = Vector3.zero
 		end
-		if flingActive then stopFling() end
+		if hrp.AssemblyAngularVelocity.Magnitude > 20 then
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end
 	end)
 end
+-- ============ TOUCH FLING ============
+local hiddenFling = false
+local flingLoopStarted = false
+
+local function startTouchFlingLoop()
+	if flingLoopStarted then return end
+	flingLoopStarted = true
+
+	task.spawn(function()
+		local lp = Players.LocalPlayer
+		local movel = 0.1
+
+		while _G.UniqGen == GEN do
+			RunService.Heartbeat:Wait()
+
+			if hiddenFling then
+				local c = lp.Character
+				local hrp = c and c:FindFirstChild("HumanoidRootPart")
+
+				if c and hrp then
+					local vel = hrp.Velocity
+					hrp.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
+					RunService.RenderStepped:Wait()
+
+					if c.Parent and hrp.Parent then
+						hrp.Velocity = vel
+					end
+
+					RunService.Stepped:Wait()
+
+					if c.Parent and hrp.Parent then
+						hrp.Velocity = vel + Vector3.new(0, movel, 0)
+						movel = movel * -1
+					end
+				end
+			end
+		end
+	end)
+end
+
+local function setTouchFling(on)
+	hiddenFling = on
+	if on then
+		startTouchFlingLoop()
+	end
+end
+
+
+
+
+
+
+
+
+
+-- ============ WATERMARK ============
+local watermarkGui = nil
+local watermarkConn = nil
+local fpsTween = nil
+
+local function setWatermark(on)
+	if watermarkConn then
+		watermarkConn:Disconnect()
+		watermarkConn = nil
+	end
+	if fpsTween then
+		fpsTween:Cancel()
+		fpsTween = nil
+	end
+	if watermarkGui then
+		watermarkGui:Destroy()
+		watermarkGui = nil
+	end
+
+	if not on then return end
+
+	watermarkGui = Instance.new("ScreenGui")
+	watermarkGui.Name = "UniqWatermark"
+	watermarkGui.ResetOnSpawn = false
+	watermarkGui.IgnoreGuiInset = true
+	watermarkGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	watermarkGui.Parent = CoreGui
+
+	-- pill
+	local pill = Instance.new("Frame")
+	pill.Name = "Pill"
+	pill.Size = UDim2.new(0, 170, 0, 36)
+	pill.Position = UDim2.new(0.5, -85, 0, 12)
+	pill.BackgroundColor3 = Color3.fromRGB(3, 3, 4)
+	pill.BackgroundTransparency = 1 -- start invisible
+	pill.BorderSizePixel = 0
+	pill.ClipsDescendants = false
+	pill.Parent = watermarkGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = pill
+
+	-- logo 
+	local logo = Instance.new("ImageLabel")
+	logo.Size = UDim2.new(0, 70, 0, 70)
+    logo.Position = UDim2.new(0, 8, 0.5, -35.0)
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://87984615449337"
+	logo.ImageTransparency = 1 -- start invisible
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.ZIndex = 2
+	logo.Parent = pill
+
+	-- FPS
+	local fpsLabel = Instance.new("TextLabel")
+	fpsLabel.Size = UDim2.new(1, -20, 1, 0)
+	fpsLabel.Position = UDim2.new(0, 8, 0, 0.5)
+	fpsLabel.BackgroundTransparency = 1
+	fpsLabel.Text = "FPS: 60"
+	fpsLabel.Font = Enum.Font.GothamBold
+	fpsLabel.TextSize = 15
+	fpsLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+	fpsLabel.TextTransparency = 1 -- start invisible
+	fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
+	fpsLabel.ZIndex = 3
+	fpsLabel.Parent = pill
+
+	-- fade in animation
+	local fadeInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(pill, fadeInfo, { BackgroundTransparency = 0 }):Play()
+	TweenService:Create(logo, fadeInfo, { ImageTransparency = 0 }):Play()
+	TweenService:Create(fpsLabel, fadeInfo, { TextTransparency = 0 }):Play()
+
+	local fpsNum = Instance.new("NumberValue")
+	fpsNum.Value = 60
+	fpsNum.Parent = watermarkGui
+
+	fpsNum:GetPropertyChangedSignal("Value"):Connect(function()
+		fpsLabel.Text = "FPS: " .. tostring(math.floor(fpsNum.Value + 0.5))
+	end)
+
+	local frames = 0
+	local last = tick()
+
+	watermarkConn = RunService.RenderStepped:Connect(function()
+		frames += 1
+		local now = tick()
+		if now - last >= 0.25 then
+			local real = math.floor(frames / (now - last))
+			frames = 0
+			last = now
+
+			if fpsTween then fpsTween:Cancel() end
+			fpsTween = TweenService:Create(
+				fpsNum,
+				TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Value = real }
+			)
+			fpsTween:Play()
+		end
+	end)
+end
+
+
+
+
+
+
+
+
 
 local knownStaff={} local function isStaff(p) if not p or p==player then return false end if knownStaff[p.UserId] then return true end if p.Team then local t=p.Team.Name:lower() if t:find("staff") or t:find("admin") or t:find("mod") then return true end end local ln=p.Name:lower() local ld=(p.DisplayName or ""):lower() return ln:find("admin") or ln:find("mod") or ln:find("staff") or ld:find("admin") or ld:find("mod") or ld:find("staff") end
 local function getSelStaff() local l={} for _,p in ipairs(Players:GetPlayers()) do if p~=player and knownStaff[p.UserId] then table.insert(l,state.playerListTagStyle=="Display Tags" and p.DisplayName or p.Name) end end table.sort(l) return l end
@@ -353,7 +472,7 @@ local DH={
 }
 
 local function shutdown()
-	state.walkSpeedEnabled=false state.flyEnabled=false state.jumpEnabled=false state.noJumpCooldown=false state.infiniteJump=false state.autoJump=false state.noRagdoll=false state.highGrav=false state.antiAFK=false state.noclip=false OvE=false BoxE=false SkelE=false TrE=false DistE=false NameE=false DisplayTagsE=false FillE=false state.aimbotEnabled=false
+	setWatermark(false) state.walkSpeedEnabled=false state.flyEnabled=false state.jumpEnabled=false state.noJumpCooldown=false state.infiniteJump=false state.autoJump=false state.noRagdoll=false state.highGrav=false state.antiAFK=false state.noclip=false OvE=false BoxE=false SkelE=false TrE=false DistE=false NameE=false DisplayTagsE=false FillE=false state.aimbotEnabled=false
 	if fovDrawing then pcall(function() fovDrawing.Visible=false; fovDrawing:Remove() end) end
 	_G.UniqFovDrawing=nil
 	stopSpec() stopFling() setFly(false) flying=false resetControls() applyNoRagdoll(false) workspace.Gravity=196.2
@@ -639,7 +758,7 @@ Value(cR,"Min Distance",1,100,1,0,"",function(v) SH["Aim Min Distance"](v) end)
 Value(cR,"Max Distance",1,500,500,0,"",function(v) SH["Aim Max Distance"](v) end)
 
 local pL=Player.Left("Conditions")
-Condition(pL,"Speed",false,function(v) TH["Toggle"](v,"Speed") end) Condition(pL,"Fly",false,function(v) TH["Toggle"](v,"Fly") end) Condition(pL,"Super Jump",false,function(v) TH["Super Jump"](v) end) Condition(pL,"Infinite Jump",false,function(v) TH["Infinite Jump"](v) end) Condition(pL,"Auto Jump",false,function(v) TH["Auto Jump"](v) end) Condition(pL,"No Jump Cooldown",false,function(v) TH["No Jump Cooldown"](v) end) Condition(pL,"No Ragdoll",false,function(v) TH["No Ragdoll"](v) end) Condition(pL,"High Gravity",false,function(v) TH["High Gravity"](v) end) Condition(pL,"NoClip",false,function(v) TH["NoClip"](v) end)
+Condition(pL,"Speed",false,function(v) TH["Toggle"](v,"Speed") end) Condition(pL,"Fly",false,function(v) TH["Toggle"](v,"Fly") end) Condition(pL,"Super Jump",false,function(v) TH["Toggle"](v,"Super Jump") end) Condition(pL,"Infinite Jump",false,function(v) TH["Infinite Jump"](v) end) Condition(pL,"Auto Jump",false,function(v) TH["Auto Jump"](v) end) Condition(pL,"No Jump Cooldown",false,function(v) TH["No Jump Cooldown"](v) end) Condition(pL,"No Ragdoll",false,function(v) TH["No Ragdoll"](v) end) Condition(pL,"High Gravity",false,function(v) TH["High Gravity"](v) end) Condition(pL,"NoClip",false,function(v) TH["NoClip"](v) end)Condition(pL,"Anti Fling",false,function(v) setAntiFling(v) end)Condition(pL,"Touch Fling",false,function(v) setTouchFling(v) end)
 -- [MODIFIED] Fly Speed max value increased to 1000
 local pR=Player.Right("Customization") Value(pR,"Walk Speed",1,50,1.0,1,"",function(v) SH["Walk Speed"](v) end) Value(pR,"Fly Speed",50,1000,300,0,"",function(v) SH["Fly Speed"](v) end) Value(pR,"Jump Height",7.2,100,7.2,1,"",function(v) SH["Jump Height"](v) end)
 
@@ -664,10 +783,36 @@ Button(vR,"Toggle Preview",TogglePreview)
 
 local oL=Online.Left("")
 oL.Position=UDim2.new(0,10,0,4) oL.Size=UDim2.new(1,-20,1,-10)
+
 Dropdown(oL,"Players",function() return DS["Select Player"]() end,"0",function(v)
-	DH["Select Player"](v)
-	if state.friendBtn then state.friendBtn.Text=state.friends[v] and "Remove Friend" or "Add Friend" state.friendBtn.TextColor3=state.friends[v] and Color3.fromRGB(0,166,255) or T.Text end
+    DH["Select Player"](v)
+
+    if state.friendBtn then
+        state.friendBtn.Text = state.friends[v] and "Remove Friend" or "Add Friend"
+        state.friendBtn.TextColor3 = state.friends[v] and Color3.fromRGB(0,166,255) or T.Text
+    end
+
+    -- Switch spectate target if currently spectating
+    if isSpectating or state.isSpectating then
+        task.spawn(function()
+            local target = findP(v)
+            if not target then return end
+
+            -- wait a bit if character isn’t loaded yet
+            local tries = 0
+            while tries < 20 do
+                local hum = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health >= 0 then
+                    workspace.CurrentCamera.CameraSubject = hum
+                    return
+                end
+                tries += 1
+                task.wait(0.1)
+            end
+        end)
+    end
 end,true)
+
 Dropdown(oL,"Staff",function() return DS["Select Staff"]() end,"0",function(v) DH["Select Staff"](v) end,true)
 local oR=Online.Right("Actions")
 Button(oR,"Tp to Player",function() BH["Tp to Player"]() end)
@@ -682,42 +827,36 @@ local friendBtn=Button(oR,"Add Friend",function()
 end)
 state.friendBtn=friendBtn
 
--- [MODIFIED] Single unified Spectate toggle button implementation
+-- Single Spectate Toggle
 local isSpectating = false
-Button(oR, "Start Spectating", function()
-	local btn = script and script.Parent or nil -- Fallback tracking
-	-- We dynamically find the button instance via text if needed, or toggle states directly
+state.isSpectating = false
+
+local spectateBtn
+spectateBtn = Button(oR,"Start Spectating",function()
 	if not isSpectating then
 		if state.selectedPlayer and state.selectedPlayer ~= "None" then
 			specByName(state.selectedPlayer)
 			isSpectating = true
-			-- Locate and update button text via parent children lookup
-			for _, child in ipairs(oR:GetChildren()) do
-				if child:IsA("TextButton") and (child.Text == "Start Spectating" or child.Text == "Stop Spectating") then
-					child.Text = "Stop Spectating"
-				end
-			end
+			state.isSpectating = true
+			spectateBtn.Text = "Stop Spectating"
 		else
-			warn("[UNIQ] Select a player to spectate first")
+			warn("[UNIQ] Select a player first")
 		end
 	else
 		stopSpec()
 		isSpectating = false
-		for _, child in ipairs(oR:GetChildren()) do
-			if child:IsA("TextButton") and (child.Text == "Start Spectating" or child.Text == "Stop Spectating") then
-				child.Text = "Start Spectating"
-			end
-		end
+		state.isSpectating = false
+		spectateBtn.Text = "Start Spectating"
 	end
 end)
 
-Button(oR,"Fling Player",function() BH["Fling Player"]() end)
-Button(oR,"Stop Flinging",function() BH["Stop Flinging"]() end)
+
 Dropdown(oR,"Player Name Style",{"Name Tags","Display Tags"},"Display Tags",function(v) state.playerListTagStyle=v end)
 
 local mL=Misc.Left("Menu")
 Condition(mL,"Auto Reattach",true,function(v) TH["Auto Reattach"](v) end)
 Condition(mL,"Anti-AFK",false,function(v) TH["Anti-AFK"](v) end)
+Condition(mL,"Water Mark",true,function(v) setWatermark(v) end)
 Button(mL,"Unload Menu",function() closePreview() pcall(shutdown) _G.UniqShutdown=nil Screen:Destroy() end)
 local mR=Misc.Right("Utilities")
 Button(mR,"Server Hop",serverHop) Button(mR,"Rejoin Server",rejoin) Button(mR,"Copy Server ID",function() if setclipboard then setclipboard(game.JobId) end end)
@@ -730,7 +869,7 @@ end
 -- INTRO
 do
 local introFinished=false
-do local ac=T.Accent local cb=Color3.fromRGB(20,140,255) local pb=Color3.fromRGB(18,64,120) local pt=Color3.fromRGB(215,240,255) local txt=Color3.fromRGB(240,240,240) local soft=Color3.fromRGB(166,166,176) local ob=Lighting:FindFirstChild("UniqIntroBlur") if ob then ob:Destroy() end local blur=nn("BlurEffect",{Name="UniqIntroBlur",Size=0,Parent=Lighting}) local ov=nn("Frame",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,BorderSizePixel=0,ZIndex=50,Parent=Screen}) local title=nn("TextLabel",{Size=UDim2.new(0,520,0,58),Position=UDim2.new(0.5,0,0.45,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,Text="UNIQ",Font=Enum.Font.GothamBlack,TextSize=42,TextColor3=txt,TextTransparency=1,ZIndex=51,Parent=ov}) local sub=nn("TextLabel",{Size=UDim2.new(0,230,0,22),Position=UDim2.new(0.5,18,0.5,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,Text="Successfully Injected",Font=FM,TextSize=13,TextColor3=txt,TextTransparency=1,ZIndex=51,Parent=ov}) local chk=nn("TextLabel",{Size=UDim2.fromOffset(16,16),Position=UDim2.new(0.5,-62,0.5,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=cb,BackgroundTransparency=1,BorderSizePixel=0,Text="✓",Font=FB,TextSize=15,TextColor3=Color3.new(1,1,1),TextTransparency=1,ZIndex=51,Parent=ov}) corner(chk,8) local line=nn("Frame",{Size=UDim2.new(0,250,0,2),Position=UDim2.new(0.5,0,0.479,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=ac,BackgroundTransparency=1,BorderSizePixel=0,ZIndex=51,Parent=ov}) corner(line,1) nn("UIGradient",{Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(0.18,0.55),NumberSequenceKeypoint.new(0.5,0.08),NumberSequenceKeypoint.new(0.82,0.55),NumberSequenceKeypoint.new(1,1)}),Parent=line}) local stat=nn("Frame",{Size=UDim2.new(0,285,0,30),Position=UDim2.new(0.5,17,0.545,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,ZIndex=50,Parent=ov}) local pr=nn("TextLabel",{Size=UDim2.fromOffset(46,28),Position=UDim2.fromOffset(17,1),BackgroundTransparency=1,Text="Press",Font=Fn,TextSize=13,TextColor3=soft,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=51,Parent=stat}) local pill=nn("TextLabel",{Size=UDim2.fromOffset(56,20),Position=UDim2.fromOffset(60,5),BackgroundColor3=pb,BackgroundTransparency=1,BorderSizePixel=0,Text="RSHIFT",Font=FB,TextSize=10,TextColor3=pt,TextTransparency=1,ZIndex=51,Parent=stat}) corner(pill,3) local ps=stroke(pill,ac) ps.Transparency=1 local stx=nn("TextLabel",{Size=UDim2.new(0,150,1,0),Position=UDim2.fromOffset(129,0),BackgroundTransparency=1,Text="to open the menu",Font=FM,TextSize=13,TextColor3=soft,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=51,Parent=stat}) local IN=TweenInfo.new(1.0,Enum.EasingStyle.Quad,Enum.EasingDirection.Out) local OUT=TweenInfo.new(0.21,Enum.EasingStyle.Quad,Enum.EasingDirection.In) tw(blur,0.64,{Size=18}) TweenService:Create(title,IN,{TextTransparency=0}):Play() TweenService:Create(sub,IN,{TextTransparency=0}):Play() TweenService:Create(chk,IN,{TextTransparency=0,BackgroundTransparency=0}):Play() TweenService:Create(line,IN,{BackgroundTransparency=0.08}):Play() TweenService:Create(pr,IN,{TextTransparency=0}):Play() TweenService:Create(pill,IN,{TextTransparency=0,BackgroundTransparency=0.08}):Play() TweenService:Create(ps,IN,{Transparency=0.35}):Play() TweenService:Create(stx,IN,{TextTransparency=0}):Play() task.delay(3.40,function() TweenService:Create(blur,OUT,{Size=0}):Play() TweenService:Create(title,OUT,{TextTransparency=1}):Play() TweenService:Create(sub,OUT,{TextTransparency=1}):Play() TweenService:Create(chk,OUT,{TextTransparency=1,BackgroundTransparency=1}):Play() TweenService:Create(line,OUT,{BackgroundTransparency=1}):Play() TweenService:Create(pr,OUT,{TextTransparency=1}):Play() TweenService:Create(pill,OUT,{TextTransparency=1,BackgroundTransparency=1}):Play() TweenService:Create(ps,OUT,{Transparency=1}):Play() TweenService:Create(stx,OUT,{TextTransparency=1}):Play() end) task.delay(3.59,function() if ov.Parent then ov:Destroy() end if blur.Parent then blur:Destroy() end introFinished=true end) end
+do local ac=T.Accent local cb=Color3.fromRGB(20,140,255) local pb=Color3.fromRGB(18,64,120) local pt=Color3.fromRGB(215,240,255) local txt=Color3.fromRGB(240,240,240) local soft=Color3.fromRGB(166,166,176) local ob=Lighting:FindFirstChild("UniqIntroBlur") if ob then ob:Destroy() end local blur=nn("BlurEffect",{Name="UniqIntroBlur",Size=0,Parent=Lighting}) local ov=nn("Frame",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,BorderSizePixel=0,ZIndex=50,Parent=Screen}) local title=nn("TextLabel",{Size=UDim2.new(0,520,0,58),Position=UDim2.new(0.5,0,0.45,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,Text="UNIQ",Font=Enum.Font.GothamBlack,TextSize=42,TextColor3=txt,TextTransparency=1,ZIndex=51,Parent=ov}) local sub=nn("TextLabel",{Size=UDim2.new(0,230,0,22),Position=UDim2.new(0.5,18,0.5,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,Text="Successfully Injected",Font=FM,TextSize=13,TextColor3=txt,TextTransparency=1,ZIndex=51,Parent=ov}) local chk=nn("TextLabel",{Size=UDim2.fromOffset(16,16),Position=UDim2.new(0.5,-62,0.5,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=cb,BackgroundTransparency=1,BorderSizePixel=0,Text="✓",Font=FB,TextSize=15,TextColor3=Color3.new(1,1,1),TextTransparency=1,ZIndex=51,Parent=ov}) corner(chk,8) local line=nn("Frame",{Size=UDim2.new(0,250,0,2),Position=UDim2.new(0.5,0,0.479,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=ac,BackgroundTransparency=1,BorderSizePixel=0,ZIndex=51,Parent=ov}) corner(line,1) nn("UIGradient",{Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(0.18,0.55),NumberSequenceKeypoint.new(0.5,0.08),NumberSequenceKeypoint.new(0.82,0.55),NumberSequenceKeypoint.new(1,1)}),Parent=line}) local stat=nn("Frame",{Size=UDim2.new(0,285,0,30),Position=UDim2.new(0.5,17,0.545,0),AnchorPoint=Vector2.new(0.5,0.5),BackgroundTransparency=1,ZIndex=50,Parent=ov}) local pr=nn("TextLabel",{Size=UDim2.fromOffset(46,28),Position=UDim2.fromOffset(17,1),BackgroundTransparency=1,Text="Press",Font=Fn,TextSize=13,TextColor3=soft,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=51,Parent=stat}) local pill=nn("TextLabel",{Size=UDim2.fromOffset(56,20),Position=UDim2.fromOffset(60,5),BackgroundColor3=pb,BackgroundTransparency=1,BorderSizePixel=0,Text="RSHIFT",Font=FB,TextSize=10,TextColor3=pt,TextTransparency=1,ZIndex=51,Parent=stat}) corner(pill,3) local ps=stroke(pill,ac) ps.Transparency=1 local stx=nn("TextLabel",{Size=UDim2.new(0,150,1,0),Position=UDim2.fromOffset(129,0),BackgroundTransparency=1,Text="to open the menu",Font=FM,TextSize=13,TextColor3=soft,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=51,Parent=stat}) local IN=TweenInfo.new(1.0,Enum.EasingStyle.Quad,Enum.EasingDirection.Out) local OUT=TweenInfo.new(0.21,Enum.EasingStyle.Quad,Enum.EasingDirection.In) tw(blur,0.64,{Size=18}) TweenService:Create(title,IN,{TextTransparency=0}):Play() TweenService:Create(sub,IN,{TextTransparency=0}):Play() TweenService:Create(chk,IN,{TextTransparency=0,BackgroundTransparency=0}):Play() TweenService:Create(line,IN,{BackgroundTransparency=0.08}):Play() TweenService:Create(pr,IN,{TextTransparency=0}):Play() TweenService:Create(pill,IN,{TextTransparency=0,BackgroundTransparency=0.08}):Play() TweenService:Create(ps,IN,{Transparency=0.35}):Play() TweenService:Create(stx,IN,{TextTransparency=0}):Play() task.delay(3.40,function() TweenService:Create(blur,OUT,{Size=0}):Play() TweenService:Create(title,OUT,{TextTransparency=1}):Play() TweenService:Create(sub,OUT,{TextTransparency=1}):Play() TweenService:Create(chk,OUT,{TextTransparency=1,BackgroundTransparency=1}):Play() TweenService:Create(line,OUT,{BackgroundTransparency=1}):Play() TweenService:Create(pr,OUT,{TextTransparency=1}):Play() TweenService:Create(pill,OUT,{TextTransparency=1,BackgroundTransparency=1}):Play() TweenService:Create(ps,OUT,{Transparency=1}):Play() TweenService:Create(stx,OUT,{TextTransparency=1}):Play() end) task.delay(3.59,function() if ov.Parent then ov:Destroy() end if blur.Parent then blur:Destroy() end introFinished=true setWatermark(true) end) end
 
 local lastPos=UDim2.new(0.5,-400,0.5,-274) local menuOpen=false local menuAnimating=false
 UIS.InputBegan:Connect(function(i,gp)
@@ -751,8 +890,6 @@ UIS.InputBegan:Connect(function(i,gp)
 		end
 	end
 end)
-
-
 end
 
 local queueTeleport = queue_on_teleport

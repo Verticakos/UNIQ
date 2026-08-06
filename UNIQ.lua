@@ -1,7 +1,3 @@
-if _G.UniqLoaded then
-    warn("[UNIQ] Script is already running. Aborting duplicate load.")
-    return
-end
 
 _G.UniqLoaded = true
 local Players=game:GetService("Players") local RunService=game:GetService("RunService")

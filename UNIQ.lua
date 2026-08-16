@@ -6,8 +6,9 @@
 local autoRA=false do local a,b=pcall(readfile,"uniq_settings.json") if a and b and #b>0 then local c,d=pcall(HttpService.JSONDecode,HttpService,b) if c and type(d)=="table" and typeof(d.autoReattach)=="boolean" then autoRA=d.autoReattach end end end
 local prevRun=0 do local a,b=pcall(readfile,"uniq_runtime.json") if a and b and #b>0 then prevRun=tonumber(b) or 0 end end
 pcall(writefile,"uniq_runtime.json",tostring(os.time()))
-if _G.UniqGen and not autoRA and _G.UniqRespawn and tick()-_G.UniqRespawn<3 then return end
-if not _G.UniqGen and not autoRA and prevRun>0 and os.time()-prevRun<60 then return end
+if _G.UniqGen and not autoRA and _G.UniqRespawn and tick()-_G.UniqRespawn<30 then return end
+if not autoRA and prevRun>0 and os.time()-prevRun<10 then return end
+if not _G.UniqGen and not autoRA and prevRun>0 and os.time()-prevRun<120 then return end
 if _G.UniqShutdown then pcall(_G.UniqShutdown) _G.UniqShutdown=nil end
 _G.UniqGen = (_G.UniqGen or 0) + 1 
  GEN = _G.UniqGen
@@ -606,8 +607,11 @@ visR=Players.PlayerRemoving:Connect(function(plr) rmAll(plr) if CConns[plr] then
 for _,plr in ipairs(Players:GetPlayers()) do setupPlayer(plr) end
 -- also reattach own visuals after respawn
 player.CharacterRemoving:Connect(function() _G.UniqRespawn=tick() end)
-charConn=player.CharacterAdded:Connect(function()
+local function watchDeath(c) local h=c and c:FindFirstChildOfClass("Humanoid") if h then h.Died:Connect(function() _G.UniqRespawn=tick() end) end end
+watchDeath(player.Character)
+charConn=player.CharacterAdded:Connect(function(c)
 	_G.UniqRespawn=tick()
+	watchDeath(c)
 	if _G.UniqGen~=GEN then return end
 	task.wait(0.5)
 	if not state.autoReattach then return end

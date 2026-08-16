@@ -607,7 +607,21 @@ visR=Players.PlayerRemoving:Connect(function(plr) rmAll(plr) if CConns[plr] then
 for _,plr in ipairs(Players:GetPlayers()) do setupPlayer(plr) end
 -- also reattach own visuals after respawn
 player.CharacterRemoving:Connect(function() _G.UniqRespawn=tick() end)
-local function watchDeath(c) local h=c and c:FindFirstChildOfClass("Humanoid") if h then h.Died:Connect(function() _G.UniqRespawn=tick() end) end end
+local function watchDeath(c)
+	local h=c and c:FindFirstChildOfClass("Humanoid")
+	if h then
+		local armed=false
+		local hb
+		h.Died:Connect(function() _G.UniqRespawn=tick() end)
+		h.HealthChanged:Connect(function(v)
+			local want=v<40
+			if want and not armed then _G.UniqRespawn=tick() end
+			armed=want
+		end)
+		h.AncestryChanged:Connect(function() if hb then hb:Disconnect() end end)
+		hb=RunService.Heartbeat:Connect(function() if armed then _G.UniqRespawn=tick() end end)
+	end
+end
 watchDeath(player.Character)
 charConn=player.CharacterAdded:Connect(function(c)
 	_G.UniqRespawn=tick()
